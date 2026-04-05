@@ -13,16 +13,9 @@ import { db } from "../../../firebase/firestore";
 import { generateInviteToken } from "../../../lib/token";
 import type { Pair } from "../../../types";
 
-/** ログイン時にユーザープロフィールを保存（初回作成 or 更新） */
-export const saveUserProfile = async (
-  uid: string,
-  displayName: string | null
-): Promise<void> => {
-  await setDoc(
-    doc(db, "users", uid),
-    { uid, displayName: displayName ?? "" },
-    { merge: true }
-  );
+/** ログイン時にユーザーレコードを初期化（displayName は NicknameSetup で設定するため上書きしない） */
+export const saveUserProfile = async (uid: string): Promise<void> => {
+  await setDoc(doc(db, "users", uid), { uid }, { merge: true });
 };
 
 /** displayName を更新する */

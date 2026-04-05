@@ -13,6 +13,8 @@ import {
   reissueInviteToken,
 } from "../services/pairService";
 import { generateInviteUrl, getInviteParams } from "../../../lib/token";
+import { db } from "../../../firebase/firestore";
+import { doc, onSnapshot } from "firebase/firestore";
 
 type Step = "loading" | "nickname" | "pair";
 
@@ -33,7 +35,7 @@ export const PairSetupPage = () => {
   const [pairLoading, setPairLoading] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // 初期化：displayName と pairId の状態確認
+  // 初期化：displayName・pairId の確認 + 招待URL自動参加
   useEffect(() => {
     if (!user) return;
     (async () => {
@@ -42,13 +44,43 @@ export const PairSetupPage = () => {
         getUserPairId(user.uid),
       ]);
 
+      // すでにペア所属 → ホームへ
       if (existingPairId) {
         navigate("/home", { replace: true });
         return;
       }
+
+      const inviteParams = getInviteParams();
+
+      // 招待URLあり + displayName設定済み → 直接参加
+      if (inviteParams && name) {
+        const result = await joinPair(user.uid, inviteParams.pairId, inviteParams.token);
+        if (result.success) {
+          window.history.replaceState({}, "", "/");
+          navigate("/home", { replace: true });
+          return;
+        }
+        // 参加失敗（無効なリンク等）はそのままペア画面へ
+        setPairError(result.error ?? "招待リンクが無効です。");
+      }
+
+      // 招待URLあり + displayName未設定 → ニックネーム設定後に参加（handleNicknameSave内で処理）
       setStep(name ? "pair" : "nickname");
     })();
   }, [user, navigate]);
+
+  // pairId が確定したらペアドキュメントを監視し、メンバーが2名になったら自動遷移
+  useEffect(() => {
+    if (!pairId) return;
+    const unsubscribe = onSnapshot(doc(db, "pairs", pairId), (snap) => {
+      if (!snap.exists()) return;
+      const members = snap.data().members as string[];
+      if (members.length >= 2) {
+        navigate("/setup", { replace: true });
+      }
+    });
+    return () => unsubscribe();
+  }, [pairId, navigate]);
 
   // 招待URLでアクセスした場合は nickname 設定後に自動参加
   const handleNicknameSave = async () => {

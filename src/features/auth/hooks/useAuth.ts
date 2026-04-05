@@ -25,8 +25,8 @@ export const useAuth = () => {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        // ログイン時に Firestore にプロフィールを保存（初回 or 再ログイン）
-        await saveUserProfile(user.uid, user.displayName);
+        // ログイン時にユーザーレコードを初期化（displayName は NicknameSetup で設定）
+        await saveUserProfile(user.uid);
       }
       setState({ user, loading: false, error: null });
     });
