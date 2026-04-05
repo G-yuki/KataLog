@@ -9,7 +9,7 @@ const anthropic = new Anthropic({
 });
 
 // ── アイテム生成（ヒアリング結果 → 50件JSON） ──────────────
-export const generateItems = onCall(async (request) => {
+export const generateItems = onCall({ invoker: "public" }, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "ログインが必要です。");
   }
