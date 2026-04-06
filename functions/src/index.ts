@@ -1,21 +1,19 @@
 import { setGlobalOptions } from "firebase-functions";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 setGlobalOptions({ region: "asia-northeast1", maxInstances: 10 });
 
-const claudeApiKey = defineSecret("CLAUDE_API_KEY");
+const geminiApiKey = defineSecret("GEMINI_API_KEY");
 
 // ── アイテム生成（ヒアリング結果 → 50件JSON） ──────────────
 export const generateItems = onCall(
-  { invoker: "public", secrets: [claudeApiKey] },
+  { invoker: "public", secrets: [geminiApiKey], enforceAppCheck: false },
   async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "ログインが必要です。");
   }
-
-  const anthropic = new Anthropic({ apiKey: claudeApiKey.value() });
 
   const hearing = request.data?.hearing;
   if (!hearing) {
@@ -105,13 +103,10 @@ JSON配列のみを返してください。他のテキストは一切含めな�
 - ヒアリングの好みを反映した具体的なタイトルにすること`;
 
   try {
-    const message = await anthropic.messages.create({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 4096,
-      messages: [{ role: "user", content: prompt }],
-    });
-
-    const text = message.content[0].type === "text" ? message.content[0].text : "";
+    const genAI = new GoogleGenerativeAI(geminiApiKey.value());
+    const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
 
     // JSON部分のみ抽出
     const jsonMatch = text.match(/\[[\s\S]*\]/);
