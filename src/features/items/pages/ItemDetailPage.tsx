@@ -18,6 +18,8 @@ export const ItemDetailPage = () => {
   const [rating, setRating] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [memoChanged, setMemoChanged] = useState(false);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
 
   useEffect(() => {
     if (!user) return;
@@ -34,6 +36,26 @@ export const ItemDetailPage = () => {
     setMemo(item.memo ?? "");
     setRating(item.rating ?? null);
   }, [item]);
+
+  const handleTitleEdit = () => {
+    if (!item) return;
+    setTitleDraft(item.title);
+    setEditingTitle(true);
+  };
+
+  const handleTitleSave = async () => {
+    if (!item) return;
+    const trimmed = titleDraft.trim();
+    if (trimmed && trimmed !== item.title) {
+      await saveDetail(item.itemId, { title: trimmed });
+    }
+    setEditingTitle(false);
+  };
+
+  const handleTitleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") handleTitleSave();
+    if (e.key === "Escape") setEditingTitle(false);
+  };
 
   const handleSaveMemo = async () => {
     if (!item) return;
@@ -75,10 +97,35 @@ export const ItemDetailPage = () => {
                 className="text-xl" style={{ color: "var(--color-text-mid)" }}>
           ←
         </button>
-        <h2 className="text-lg font-bold flex-1 truncate"
-            style={{ color: "var(--color-text-main)" }}>
-          {item.title}
-        </h2>
+        {editingTitle ? (
+          <input
+            autoFocus
+            value={titleDraft}
+            onChange={(e) => setTitleDraft(e.target.value)}
+            onBlur={handleTitleSave}
+            onKeyDown={handleTitleKeyDown}
+            maxLength={60}
+            style={{ flex: 1, fontSize: 17, fontWeight: 700, fontFamily: "var(--font-sans)",
+                     color: "var(--color-text-main)", background: "transparent",
+                     border: "none", borderBottom: "1.5px solid var(--color-primary)",
+                     outline: "none", padding: "2px 0" }}
+          />
+        ) : (
+          <button onClick={handleTitleEdit}
+                  style={{ flex: 1, textAlign: "left", background: "transparent",
+                           border: "none", cursor: "pointer", display: "flex",
+                           alignItems: "center", gap: 6, minWidth: 0 }}>
+            <span style={{ fontSize: 17, fontWeight: 700, fontFamily: "var(--font-sans)",
+                           color: "var(--color-text-main)", overflow: "hidden",
+                           textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {item.title}
+            </span>
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style={{ flexShrink: 0 }}>
+              <path d="M9 2l2 2L4 11H2V9L9 2Z" stroke="var(--color-text-soft)"
+                    strokeWidth="1.3" strokeLinejoin="round"/>
+            </svg>
+          </button>
+        )}
         <button onClick={() => toggleIsWant(item.itemId, item.isWant)}
                 title={item.isWant ? "お気に入り解除" : "お気に入り登録"}
                 className="text-2xl">

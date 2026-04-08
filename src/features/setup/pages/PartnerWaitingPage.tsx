@@ -19,13 +19,13 @@ export const PartnerWaitingPage = () => {
     });
   }, [user, navigate]);
 
-  // アイテムが作成されたら自動でホームへ
+  // pendingItems が揃ったらパートナースワイプ画面へ
   useEffect(() => {
     if (!pairId) return;
     const unsubscribe = onSnapshot(
-      collection(db, "pairs", pairId, "items"),
+      collection(db, "pairs", pairId, "pendingItems"),
       (snap) => {
-        if (!snap.empty) navigate("/home", { replace: true });
+        if (!snap.empty) navigate("/setup/partner-swipe", { replace: true });
       }
     );
     return () => unsubscribe();
@@ -55,7 +55,7 @@ export const PartnerWaitingPage = () => {
         ))}
       </div>
       <p className="text-xs" style={{ color: "var(--color-text-soft)" }}>
-        パートナーがリストを作成中...
+        パートナーがスワイプ中...⌛
       </p>
     </div>
   );

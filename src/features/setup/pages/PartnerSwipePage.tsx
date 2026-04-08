@@ -1,34 +1,32 @@
-// src/features/setup/pages/SwipePage.tsx
+// src/features/setup/pages/PartnerSwipePage.tsx
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/hooks/useAuth";
 import { Loading } from "../../../components/Loading";
-import { useGenerateItems } from "../hooks/useGenerateItems";
 import { getUserPairId } from "../../pair/services/pairService";
-import { savePendingItems } from "../../items/services/itemService";
+import {
+  subscribePendingItems,
+  finalizeMatchedItems,
+} from "../../items/services/itemService";
 import { SwipeTutorial } from "../components/SwipeTutorial";
-import { db } from "../../../firebase/firestore";
-import { doc, getDoc } from "firebase/firestore";
-import type { Hearing, ItemDraft } from "../../../types";
+import type { PendingItem, SwipeAction } from "../../../types";
 import { OUTDOOR_CATEGORIES } from "../../../lib/constants";
 
-type SwipeAction = "good" | "pass" | "go";
-
-export const SwipePage = () => {
+export const PartnerSwipePage = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { generate, loading: generating } = useGenerateItems();
 
-  const [items, setItems] = useState<ItemDraft[]>([]);
+  const [pairId, setPairId] = useState<string | null>(null);
+  const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
   const [index, setIndex] = useState(0);
-  const [results, setResults] = useState<{ draft: ItemDraft; action: SwipeAction }[]>([]);
+  const [results, setResults] = useState<{ pendingItemId: string; action: SwipeAction }[]>([]);
+  const [initLoading, setInitLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showComplete, setShowComplete] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [initLoading, setInitLoading] = useState(true);
   const [showTutorial, setShowTutorial] = useState(true);
 
-  // タッチ/マウス スワイプ
+  // スワイプ操作
   const startX = useRef<number | null>(null);
   const startY = useRef<number | null>(null);
   const [dragX, setDragX] = useState(0);
@@ -38,46 +36,44 @@ export const SwipePage = () => {
   useEffect(() => {
     if (!user) return;
     (async () => {
-      try {
-        const pairId = await getUserPairId(user.uid);
-        if (!pairId) { navigate("/"); return; }
-        const pairSnap = await getDoc(doc(db, "pairs", pairId));
-        if (!pairSnap.exists()) { navigate("/"); return; }
-        const hearing = pairSnap.data().hearing as Hearing | undefined;
-        if (!hearing) { navigate("/setup"); return; }
-
-        const generated = await generate(hearing);
-        if (generated) setItems(generated);
-      } finally {
-        setInitLoading(false);
-      }
+      const id = await getUserPairId(user.uid);
+      if (!id) { navigate("/"); return; }
+      setPairId(id);
     })();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [user, navigate]);
 
-  const current = items[index];
-  const isOutdoor = current
-    ? OUTDOOR_CATEGORIES.includes(current.category as never)
-    : false;
+  // pendingItems を購読（一度取得したら購読解除）
+  useEffect(() => {
+    if (!pairId) return;
+    const unsub = subscribePendingItems(pairId, (items) => {
+      if (items.length > 0) {
+        setPendingItems(items);
+        setInitLoading(false);
+        unsub(); // 取得できたら購読終了
+      }
+    });
+    return () => unsub();
+  }, [pairId]);
+
+  const current = pendingItems[index];
+  const isOutdoor = current ? OUTDOOR_CATEGORIES.includes(current.category as never) : false;
 
   const handleAction = (action: SwipeAction) => {
     if (!current) return;
-    setResults((prev) => [...prev, { draft: current, action }]);
+    setResults((prev) => [...prev, { pendingItemId: current.pendingItemId, action }]);
     setDragX(0);
     setDragY(0);
     setIndex((i) => i + 1);
   };
 
-  // 全件完了後 pendingItems に保存（パートナーのスワイプを待つ）
+  // 全件完了後にマッチング処理
   useEffect(() => {
-    if (items.length === 0 || index < items.length) return;
+    if (pendingItems.length === 0 || index < pendingItems.length) return;
     (async () => {
-      if (!user) return;
+      if (!pairId) return;
       setSaving(true);
       try {
-        const pairId = await getUserPairId(user.uid);
-        if (!pairId) throw new Error("no pairId");
-        await savePendingItems(pairId, results);
+        await finalizeMatchedItems(pairId, pendingItems, results);
         setSaving(false);
         setShowComplete(true);
       } catch {
@@ -86,9 +82,9 @@ export const SwipePage = () => {
       }
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [index, items.length]);
+  }, [index, pendingItems.length]);
 
-  // タッチ操作
+  // ポインター操作
   const onPointerDown = (e: React.PointerEvent) => {
     startX.current = e.clientX;
     startY.current = e.clientY;
@@ -118,65 +114,62 @@ export const SwipePage = () => {
     startY.current = null;
   };
 
-  if (initLoading || generating) return <Loading message="AIがリストを生成中..." />;
-  if (saving) return <Loading message="リストを保存中..." />;
+  if (initLoading) return <Loading message="リストを読み込み中..." />;
+  if (saving)      return <Loading message="マッチング中..." />;
   if (error) return (
     <div className="flex flex-col items-center justify-center min-h-screen gap-4 px-6">
       <p className="text-red-500 text-sm text-center">{error}</p>
-      <button className="btn-primary max-w-xs" onClick={() => navigate("/setup")}>
-        ヒアリングに戻る
-      </button>
+      <button className="btn-ghost" onClick={() => navigate("/")}>ホームへ</button>
     </div>
   );
 
   if (showComplete) return (
     <div className="flex flex-col items-center justify-center min-h-screen px-6 gap-6 text-center"
          style={{ background: "var(--color-bg)", fontFamily: "var(--font-sans)" }}>
-      <p className="text-7xl">✅</p>
+      <p className="text-7xl animate-bounce">🎉</p>
       <h2 className="text-2xl font-bold" style={{ color: "var(--color-text-main)" }}>
-        あなたのスワイプが完了！
+        ふたりのリストが完成しました！
       </h2>
       <p className="text-sm leading-relaxed" style={{ color: "var(--color-text-mid)" }}>
-        パートナーがスワイプを完了すると<br />
-        ふたりのリストが完成します。<br />
-        招待リンクを送りましょう！
+        これからふたりで<br />
+        思い出をつくっていきましょう！
       </p>
       <button
         className="btn-primary max-w-xs mt-4"
         onClick={() => navigate("/home", { replace: true })}
       >
-        ホームへ →
+        リストを見る →
       </button>
     </div>
   );
 
-  if (index >= items.length && items.length > 0) {
-    return <Loading message="リストを保存中..." />;
-  }
-
   if (!current) return null;
 
   const rotation = dragX * 0.08;
-  const opacity = Math.max(0, 1 - Math.abs(dragX) / 300);
-
-  // どの方向にドラッグ中か
+  const opacity  = Math.max(0, 1 - Math.abs(dragX) / 300);
   const absX = Math.abs(dragX);
   const absY = Math.abs(dragY);
-  const isGoHint = absY > absX && dragY < -30;
+  const isGoHint   = absY > absX && dragY < -30;
   const isGoodHint = !isGoHint && dragX > 30;
   const isPassHint = !isGoHint && dragX < -30;
 
   return (
-    <div className="flex flex-col items-center justify-between min-h-screen px-4 py-8">
-      {showTutorial && <SwipeTutorial onClose={() => setShowTutorial(false)} />}
-      {/* 進捗 */}
+    <div className="flex flex-col items-center justify-between min-h-screen px-4 py-8"
+         style={{ background: "var(--color-bg)", fontFamily: "var(--font-sans)" }}>
+      {showTutorial && <SwipeTutorial onClose={() => setShowTutorial(false)} isPartner />}
+
+      {/* ヘッダー */}
       <div className="w-full max-w-sm text-center">
+        <p className="text-xs mb-1" style={{ color: "var(--color-text-soft)", letterSpacing: "0.1em" }}>
+          PARTNER SWIPE
+        </p>
         <p className="text-sm font-bold mb-2" style={{ color: "var(--color-text-mid)" }}>
-          {index + 1} / {items.length}
+          {index + 1} / {pendingItems.length}
         </p>
         <div className="w-full h-1.5 rounded-full" style={{ background: "var(--color-border)" }}>
           <div className="h-1.5 rounded-full transition-all"
-               style={{ width: `${(index / items.length) * 100}%`, background: "var(--color-primary)" }} />
+               style={{ width: `${(index / pendingItems.length) * 100}%`,
+                        background: "var(--color-primary)" }} />
         </div>
       </div>
 
@@ -206,7 +199,6 @@ export const SwipePage = () => {
             <Tag label={current.difficulty === "easy" ? "気軽" : "特別"} />
           </div>
 
-          {/* スワイプヒント */}
           {isGoodHint && (
             <div className="absolute top-4 right-4 text-2xl font-black"
                  style={{ color: "var(--color-primary)", opacity: Math.min(1, dragX / 80) }}>
@@ -228,33 +220,27 @@ export const SwipePage = () => {
         </div>
       </div>
 
-      {/* ボタン操作 */}
+      {/* ボタン */}
       <div className="w-full max-w-sm flex flex-col gap-3">
-        <button
-          className="w-full py-3 rounded-2xl font-bold text-sm"
-          style={{ background: "#f43f5e", color: "white" }}
-          onClick={() => handleAction("go")}
-        >
-          ⇧ Go!! （お気に入り）
+        <button className="w-full py-3 rounded-2xl font-bold text-sm"
+                style={{ background: "#f43f5e", color: "white" }}
+                onClick={() => handleAction("go")}>
+          ⇧ Go!! （最優先）
         </button>
         <div className="flex gap-3">
-          <button
-            className="flex-1 py-4 rounded-2xl border-2 font-bold text-sm"
-            style={{ borderColor: "var(--color-border)", color: "var(--color-text-mid)", background: "var(--color-surface)" }}
-            onClick={() => handleAction("pass")}
-          >
+          <button className="flex-1 py-4 rounded-2xl border-2 font-bold text-sm"
+                  style={{ borderColor: "var(--color-border)", color: "var(--color-text-mid)",
+                           background: "var(--color-surface)" }}
+                  onClick={() => handleAction("pass")}>
             ⇦ Pass
           </button>
-          <button
-            className="flex-1 py-4 rounded-2xl font-bold text-sm"
-            style={{ background: "var(--color-primary)", color: "white" }}
-            onClick={() => handleAction("good")}
-          >
+          <button className="flex-1 py-4 rounded-2xl font-bold text-sm"
+                  style={{ background: "var(--color-primary)", color: "white" }}
+                  onClick={() => handleAction("good")}>
             Good ⇨
           </button>
         </div>
       </div>
-
     </div>
   );
 };

@@ -5,6 +5,7 @@ import { PairSetupPage } from "../features/pair/pages/PairSetupPage";
 import { HearingPage } from "../features/setup/pages/HearingPage";
 import { SwipePage } from "../features/setup/pages/SwipePage";
 import { PartnerWaitingPage } from "../features/setup/pages/PartnerWaitingPage";
+import { PartnerSwipePage } from "../features/setup/pages/PartnerSwipePage";
 import { HomePage } from "../features/items/pages/HomePage";
 import { ItemDetailPage } from "../features/items/pages/ItemDetailPage";
 
@@ -32,6 +33,7 @@ export const AppRoutes = () => {
               <Route path="/setup" element={<HearingPage />} />
               <Route path="/setup/swipe" element={<SwipePage />} />
               <Route path="/setup/partner-waiting" element={<PartnerWaitingPage />} />
+              <Route path="/setup/partner-swipe" element={<PartnerSwipePage />} />
               <Route path="/home" element={<HomePage />} />
               <Route path="/home/:itemId" element={<ItemDetailPage />} />
               <Route path="/suggest" element={<Placeholder label="提案" />} />

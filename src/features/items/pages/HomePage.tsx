@@ -34,6 +34,7 @@ export const HomePage = () => {
 
   const [filter, setFilter] = useState<Filter>("all");
   const [doneOpen, setDoneOpen] = useState(false);
+  const [tryOpen, setTryOpen] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -57,10 +58,13 @@ export const HomePage = () => {
   const activeItems = items.filter((i) => i.status !== "done");
   const doneItems   = items.filter((i) => i.status === "done");
   const goItems     = activeItems.filter((i) => i.isWant);
+  // matchTier未設定（旧データ）は "good" 扱い
+  const goodItems   = activeItems.filter((i) => !i.isWant && (i.matchTier ?? "good") !== "try");
+  const tryItems    = activeItems.filter((i) => !i.isWant && i.matchTier === "try");
 
-  const filteredActive = filter === "all"
-    ? activeItems
-    : activeItems.filter((i: Item) => i.category === filter);
+  const filteredGood = filter === "all"
+    ? goodItems
+    : goodItems.filter((i: Item) => i.category === filter);
 
   const progress = items.length > 0 ? doneItems.length / items.length : 0;
 
@@ -71,7 +75,7 @@ export const HomePage = () => {
                   background: "var(--color-bg)" }}>
 
       {/* ── ヘッダー ── */}
-      <header style={{ flexShrink: 0, padding: "48px 20px 12px",
+      <header style={{ flexShrink: 0, padding: "30px 20px 12px",
                        background: "var(--color-bg)", borderBottom: "1px solid rgba(0,0,0,0.07)" }}>
         <div>
           <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 22, fontWeight: 500,
@@ -123,24 +127,26 @@ export const HomePage = () => {
         {/* Go!! セクション */}
         {goItems.length > 0 && (
           <div style={{ borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
-            <SectionLabel>Go!! — 最優先リスト❤️</SectionLabel>
+            <SectionLabel>Go!! — 最優先リスト</SectionLabel>
             <div style={{ padding: "0 20px 12px", display: "flex", gap: 10,
                           overflowX: "auto", scrollbarWidth: "none" }}>
               {goItems.map((item) => (
                 <GoCard key={item.itemId} item={item}
-                        onClick={() => navigate(`/home/${item.itemId}`)} />
+                        onClick={() => navigate(`/home/${item.itemId}`)}
+                        onDone={() => setStatus(item.itemId, "done")}
+                        onWant={() => toggleIsWant(item.itemId, item.isWant)} />
               ))}
             </div>
           </div>
         )}
 
         {/* Good カードグリッド */}
-        {filteredActive.length > 0 ? (
+        {filteredGood.length > 0 ? (
           <>
             <SectionLabel style={{ paddingTop: 10 }}>Good — やりたいリスト</SectionLabel>
             <div style={{ padding: "0 20px 4px",
                           display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              {filteredActive.map((item) => (
+              {filteredGood.map((item) => (
                 <GoodCard key={item.itemId} item={item}
                           onTap={() => navigate(`/home/${item.itemId}`)}
                           onWant={() => toggleIsWant(item.itemId, item.isWant)}
@@ -149,19 +155,48 @@ export const HomePage = () => {
             </div>
           </>
         ) : (
-          /* 空状態 */
           activeItems.length === 0 && (
             <EmptyState onAskAI={() => navigate("/suggest")} />
           )
         )}
 
         {/* カテゴリフィルターで絞った結果が0件かつ全体には残りがある場合 */}
-        {filteredActive.length === 0 && activeItems.length > 0 && (
+        {filteredGood.length === 0 && goodItems.length > 0 && (
           <div style={{ padding: "40px 20px", textAlign: "center" }}>
             <p style={{ fontSize: 13, color: "var(--color-text-soft)" }}>
               このカテゴリにはアイテムがありません
             </p>
           </div>
+        )}
+
+        {/* Try? トグル（片方がPassしたアイテム） */}
+        {tryItems.length > 0 && (
+          <>
+            <button onClick={() => setTryOpen((o) => !o)}
+                    style={{ width: "100%", display: "flex", alignItems: "center", gap: 10,
+                             padding: "14px 20px", background: "transparent", border: "none",
+                             borderTop: "1px solid rgba(0,0,0,0.06)", cursor: "pointer" }}>
+              <div style={{ flex: 1, height: 1, background: "rgba(0,0,0,0.08)" }} />
+              <span style={{ fontSize: 11, color: "var(--color-text-mid)",
+                             letterSpacing: "0.06em", whiteSpace: "nowrap",
+                             fontFamily: "var(--font-sans)" }}>
+                {tryOpen ? `Try? ${tryItems.length}件を隠す`
+                         : `Try? — 試してみる？ ${tryItems.length}件`}
+              </span>
+              <div style={{ flex: 1, height: 1, background: "rgba(0,0,0,0.08)" }} />
+            </button>
+            {tryOpen && (
+              <div style={{ padding: "0 20px 4px",
+                            display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                {tryItems.map((item) => (
+                  <GoodCard key={item.itemId} item={item}
+                            onTap={() => navigate(`/home/${item.itemId}`)}
+                            onWant={() => toggleIsWant(item.itemId, item.isWant)}
+                            onDone={() => setStatus(item.itemId, "done")} />
+                ))}
+              </div>
+            )}
+          </>
         )}
 
         {/* 完了トグル */}
@@ -235,13 +270,15 @@ const SectionLabel = ({ children, style }: { children: React.ReactNode; style?: 
   </p>
 );
 
-const GoCard = ({ item, onClick }: { item: Item; onClick: () => void }) => {
+const GoCard = ({ item, onClick, onDone, onWant }:
+  { item: Item; onClick: () => void; onDone: () => void; onWant: () => void }) => {
   const s = CATEGORY_STYLE[item.category] ?? CATEGORY_STYLE["その他"];
   return (
-    <button onClick={onClick}
-            style={{ flexShrink: 0, width: 120, height: 150, borderRadius: 12, overflow: "hidden",
-                     position: "relative", cursor: "pointer", border: "none", padding: 0 }}>
+    <div style={{ flexShrink: 0, width: 120, height: 150, borderRadius: 12, overflow: "hidden",
+                  position: "relative" }}>
+      {/* 背景 */}
       <div style={{ position: "absolute", inset: 0, background: s.bg }} />
+      {/* 絵文字 */}
       <div style={{ position: "absolute", inset: 0, display: "flex",
                     alignItems: "center", justifyContent: "center" }}>
         <span style={{ fontSize: 40, opacity: 0.88,
@@ -249,34 +286,54 @@ const GoCard = ({ item, onClick }: { item: Item; onClick: () => void }) => {
           {s.emoji}
         </span>
       </div>
+      {/* 評価バッジ（左上） */}
       {item.rating != null && (
         <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(0,0,0,0.5)",
                       color: "#fff", fontSize: 9, padding: "2px 6px", borderRadius: 20,
-                      display: "flex", alignItems: "center", gap: 2 }}>
+                      display: "flex", alignItems: "center", gap: 2, zIndex: 2 }}>
           <span style={{ color: "#F5C842" }}>★</span>{item.rating}
         </div>
       )}
-      <div style={{ position: "absolute", top: 8, right: 8, background: "var(--color-primary)",
-                    color: "#fff", fontSize: 9, fontWeight: 500, padding: "2px 6px", borderRadius: 20 }}>
-        Go!!
-      </div>
-      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "36px 10px 10px",
-                    background: "linear-gradient(to top, rgba(0,0,0,0.8), rgba(0,0,0,0.08) 70%, transparent)" }}>
-        <div style={{ display: "inline-block", fontSize: 9, letterSpacing: "0.08em",
-                      color: "rgba(255,255,255,0.7)", background: "rgba(255,255,255,0.14)",
-                      borderRadius: 4, padding: "2px 5px", marginBottom: 4,
-                      fontFamily: "var(--font-sans)" }}>
+      {/* ✓ 完了ボタン（右上） */}
+      <button onClick={(e) => { e.stopPropagation(); onDone(); }}
+              style={{ position: "absolute", top: 7, right: 7.5, zIndex: 2,
+                       width: 17, height: 17, borderRadius: "50%",
+                       background: "rgba(255,255,255,0.2)", border: "1.5px solid rgba(255,255,255,0.5)",
+                       display: "flex", alignItems: "center", justifyContent: "center",
+                       cursor: "pointer" }}>
+        <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+          <path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </button>
+      {/* 下部グラデーション */}
+      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 55,
+                    background: "linear-gradient(to top, rgba(0,0,0,0.8), transparent)",
+                    pointerEvents: "none" }} />
+      {/* カード本体タップ */}
+      <button onClick={onClick}
+              style={{ position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 2,
+                       padding: "8px 28px 9px 10px", background: "none", border: "none",
+                       cursor: "pointer", textAlign: "left" }}>
+        <div style={{ fontSize: 9, letterSpacing: "0.08em",
+                      color: "rgba(255,255,255,0.7)", fontFamily: "var(--font-sans)",
+                      marginBottom: 3 }}>
           {item.category}
         </div>
-        <p style={{ fontSize: 11, fontWeight: 500, color: "#fff",
-                    lineHeight: 1.35, textAlign: "left",
+        <p style={{ fontSize: 10, width: "95%", fontWeight: 500, color: "#fff", lineHeight: 1.35,
                     fontFamily: "var(--font-sans)",
-                    display: "-webkit-box", WebkitLineClamp: 2,
+                    display: "-webkit-box", WebkitLineClamp: 1,
                     WebkitBoxOrient: "vertical", overflow: "hidden" }}>
           {item.title}
         </p>
-      </div>
-    </button>
+      </button>
+      {/* ❤️ お気に入り解除（右 ✓ の下） */}
+      <button onClick={(e) => { e.stopPropagation(); onWant(); }}
+              style={{ position: "absolute", bottom: 11, right: 8, zIndex: 2,
+                       background: "transparent", border: "none",
+                       fontSize: 13, cursor: "pointer", lineHeight: 1 }}>
+        {item.isWant ? "❤️" : "🤍"}
+      </button>
+    </div>
   );
 };
 
@@ -285,7 +342,9 @@ const GoodCard = ({ item, onTap, onWant, onDone }:
   const s = CATEGORY_STYLE[item.category] ?? CATEGORY_STYLE["その他"];
   return (
     <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", height: 130 }}>
+      {/* 背景グラデーション */}
       <div style={{ position: "absolute", inset: 0, background: s.bg }} />
+      {/* 絵文字 */}
       <div style={{ position: "absolute", inset: 0, display: "flex",
                     alignItems: "center", justifyContent: "center" }}>
         <span style={{ fontSize: 36, opacity: 0.75,
@@ -293,17 +352,14 @@ const GoodCard = ({ item, onTap, onWant, onDone }:
           {s.emoji}
         </span>
       </div>
-      {/* ❤️ お気に入り */}
-      <button onClick={(e) => { e.stopPropagation(); onWant(); }}
-              style={{ position: "absolute", top: 6, left: 7,
-                       background: "transparent", border: "none",
-                       fontSize: 14, cursor: "pointer", lineHeight: 1 }}>
-        {item.isWant ? "❤️" : "🤍"}
-      </button>
-      {/* ✓ 完了ボタン */}
+      {/* 下部グラデーションオーバーレイ（全幅・角丸対応） */}
+      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 64,
+                    background: "linear-gradient(to top, rgba(0,0,0,0.75), transparent)",
+                    pointerEvents: "none" }} />
+      {/* ✓ 完了ボタン（右上） */}
       <button onClick={(e) => { e.stopPropagation(); onDone(); }}
-              style={{ position: "absolute", top: 6, right: 7,
-                       width: 24, height: 24, borderRadius: "50%",
+              style={{ position: "absolute", top: 7, right: 7.5, zIndex: 2,
+                       width: 17, height: 17, borderRadius: "50%",
                        background: "rgba(255,255,255,0.2)", border: "1.5px solid rgba(255,255,255,0.5)",
                        display: "flex", alignItems: "center", justifyContent: "center",
                        cursor: "pointer" }}>
@@ -311,18 +367,24 @@ const GoodCard = ({ item, onTap, onWant, onDone }:
           <path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
         </svg>
       </button>
-      {/* タイトル */}
+      {/* タイトルタップ領域 */}
       <button onClick={onTap}
-              style={{ position: "absolute", bottom: 0, left: 0, right: 0,
-                       padding: "28px 10px 10px", background: "none", border: "none",
-                       cursor: "pointer", textAlign: "left",
-                       backgroundImage: "linear-gradient(to top, rgba(0,0,0,0.8), transparent)" }}>
-        <p style={{ fontSize: 11, fontWeight: 500, color: "#fff", lineHeight: 1.35,
+              style={{ position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 2,
+                       padding: "8px 10px 9px 10px", background: "none", border: "none",
+                       cursor: "pointer", textAlign: "left" }}>
+        <p style={{ fontSize: 10, width: "85%", fontWeight: 500, color: "#fff", lineHeight: 1.35,
                     fontFamily: "var(--font-sans)",
-                    display: "-webkit-box", WebkitLineClamp: 2,
+                    display: "-webkit-box", WebkitLineClamp: 1,
                     WebkitBoxOrient: "vertical", overflow: "hidden" }}>
           {item.title}
         </p>
+      </button>
+      {/* ❤️ お気に入り（DOM最後 + zIndex:3 でタイトルの上に出る） */}
+      <button onClick={(e) => { e.stopPropagation(); onWant(); }}
+              style={{ position: "absolute", bottom: 10, right: 8, zIndex: 3,
+                       background: "transparent", border: "none",
+                       fontSize: 13, cursor: "pointer", lineHeight: 1 }}>
+        {item.isWant ? "❤️" : "🤍"}
       </button>
     </div>
   );

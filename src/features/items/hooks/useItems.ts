@@ -45,7 +45,7 @@ export const useItems = (pairId: string | null) => {
 
   const saveDetail = (
     itemId: string,
-    data: { memo?: string | null; rating?: number | null }
+    data: { memo?: string | null; rating?: number | null; title?: string }
   ) => {
     if (!pairId) return Promise.resolve();
     return updateItemDetail(pairId, itemId, data);

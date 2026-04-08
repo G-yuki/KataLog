@@ -44,6 +44,8 @@ export type Category =
 export type ItemType = "outdoor" | "indoor";
 export type Difficulty = "easy" | "special";
 export type ItemStatus = "unread" | "todo" | "done";
+export type MatchTier = "go" | "good" | "try";
+export type SwipeAction = "good" | "pass" | "go";
 
 export interface Item {
   itemId: string;
@@ -52,7 +54,8 @@ export interface Item {
   type: ItemType;
   difficulty: Difficulty;
   status: ItemStatus;
-  isWant: boolean;           // やりたい★フラグ
+  isWant: boolean;           // Go!!フラグ（ユーザーが変更可能）
+  matchTier: MatchTier;      // スワイプマッチング結果（固定）
   rating: number | null;     // 1〜5
   memo: string | null;       // 100文字以内
   completedAt: Timestamp | null;
@@ -69,4 +72,15 @@ export interface ItemDraft {
   category: Category;
   type: ItemType;
   difficulty: Difficulty;
+}
+
+// ふたりのスワイプ結果保存用（マッチング前）
+export interface PendingItem {
+  pendingItemId: string;
+  title: string;
+  category: Category;
+  type: ItemType;
+  difficulty: Difficulty;
+  creatorSwipe: SwipeAction;
+  createdAt: Timestamp;
 }

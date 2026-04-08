@@ -12,7 +12,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db } from "../../../firebase/firestore";
-import type { Item, ItemStatus } from "../../../types";
+import type { Item, ItemStatus, PendingItem, SwipeAction } from "../../../types";
 
 /** リアルタイム監視 */
 export const subscribeItems = (
@@ -59,7 +59,7 @@ export const toggleWant = async (
 export const updateItemDetail = async (
   pairId: string,
   itemId: string,
-  data: { memo?: string | null; rating?: number | null }
+  data: { memo?: string | null; rating?: number | null; title?: string }
 ): Promise<void> => {
   await updateDoc(doc(db, "pairs", pairId, "items", itemId), data);
 };
@@ -72,16 +72,96 @@ export const deleteItem = async (
   await deleteDoc(doc(db, "pairs", pairId, "items", itemId));
 };
 
-/** ドラッグ並び替え後の順序を一括保存（displayOrder フィールドを更新） */
-export const reorderItems = async (
+// ── Pending Items（ふたりのスワイプ前の一時保存） ──────────────
+
+/** 作成者のスワイプ結果を pendingItems に保存 */
+export const savePendingItems = async (
   pairId: string,
-  orderedIds: string[]
+  results: { draft: { title: string; category: string; type: string; difficulty: string }; action: SwipeAction }[]
 ): Promise<void> => {
   const batch = writeBatch(db);
-  orderedIds.forEach((itemId, index) => {
-    batch.update(doc(db, "pairs", pairId, "items", itemId), {
-      displayOrder: index,
-    });
+  results.forEach(({ draft, action }) => {
+    const ref = doc(collection(db, "pairs", pairId, "pendingItems"));
+    batch.set(ref, { ...draft, creatorSwipe: action, createdAt: serverTimestamp() });
   });
   await batch.commit();
 };
+
+/** pendingItems をリアルタイム監視 */
+export const subscribePendingItems = (
+  pairId: string,
+  onUpdate: (items: PendingItem[]) => void
+): Unsubscribe => {
+  return onSnapshot(
+    collection(db, "pairs", pairId, "pendingItems"),
+    (snap) => {
+      const items: PendingItem[] = snap.docs.map((d) => ({
+        pendingItemId: d.id,
+        ...d.data(),
+      } as PendingItem));
+      onUpdate(items);
+    }
+  );
+};
+
+/**
+ * パートナースワイプ完了後のマッチング処理
+ * マッチング結果を items に書き込み、pendingItems を削除する
+ *
+ * ルール:
+ *   両方 pass          → 除外
+ *   片方 pass          → matchTier: "try",  isWant: false
+ *   両方 go            → matchTier: "go",   isWant: true
+ *   それ以外(good混じり) → matchTier: "good", isWant: false
+ */
+export const finalizeMatchedItems = async (
+  pairId: string,
+  pendingItems: PendingItem[],
+  partnerResults: { pendingItemId: string; action: SwipeAction }[]
+): Promise<void> => {
+  const partnerMap = new Map(partnerResults.map((r) => [r.pendingItemId, r.action]));
+  const batch = writeBatch(db);
+
+  pendingItems.forEach((pending) => {
+    const cs = pending.creatorSwipe;
+    const ps = partnerMap.get(pending.pendingItemId);
+    if (!ps) return;
+
+    // 両方 pass → 除外
+    if (cs === "pass" && ps === "pass") return;
+
+    let matchTier: "go" | "good" | "try";
+    if (cs === "pass" || ps === "pass") {
+      matchTier = "try";
+    } else if (cs === "go" && ps === "go") {
+      matchTier = "go";
+    } else {
+      matchTier = "good";
+    }
+
+    const ref = doc(collection(db, "pairs", pairId, "items"));
+    batch.set(ref, {
+      title: pending.title,
+      category: pending.category,
+      type: pending.type,
+      difficulty: pending.difficulty,
+      status: "todo",
+      isWant: matchTier === "go",
+      matchTier,
+      rating: null,
+      memo: null,
+      completedAt: null,
+      placeId: null,
+      placeName: null,
+      placeRating: null,
+      placePhotoRef: null,
+      createdAt: serverTimestamp(),
+    });
+
+    // pendingItem を削除
+    batch.delete(doc(db, "pairs", pairId, "pendingItems", pending.pendingItemId));
+  });
+
+  await batch.commit();
+};
+
