@@ -1,17 +1,17 @@
 // src/features/items/pages/ItemDetailPage.tsx
 import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { useAuth } from "../../auth/hooks/useAuth";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useItems } from "../hooks/useItems";
 import { Loading } from "../../../components/Loading";
-import { getUserPairId } from "../../pair/services/pairService";
+import { usePair } from "../../../contexts/PairContext";
 import type { Item } from "../../../types";
 
 export const ItemDetailPage = () => {
   const { itemId } = useParams<{ itemId: string }>();
-  const { user } = useAuth();
   const navigate = useNavigate();
-  const [pairId, setPairId] = useState<string | null>(null);
+  const location = useLocation();
+  const backTo = (location.state as { from?: string } | null)?.from ?? "/home";
+  const { pairId, loading: pairLoading } = usePair();
   const { items, loading, setStatus, toggleIsWant, saveDetail, removeItem } = useItems(pairId);
 
   const [memo, setMemo] = useState("");
@@ -22,12 +22,8 @@ export const ItemDetailPage = () => {
   const [titleDraft, setTitleDraft] = useState("");
 
   useEffect(() => {
-    if (!user) return;
-    getUserPairId(user.uid).then((id) => {
-      if (!id) navigate("/", { replace: true });
-      else setPairId(id);
-    });
-  }, [user, navigate]);
+    if (!pairLoading && !pairId) navigate("/", { replace: true });
+  }, [pairId, pairLoading, navigate]);
 
   const item: Item | undefined = items.find((i) => i.itemId === itemId);
 
@@ -75,7 +71,7 @@ export const ItemDetailPage = () => {
   const handleDelete = async () => {
     if (!item || !window.confirm("このアイテムを削除しますか？")) return;
     await removeItem(item.itemId);
-    navigate("/home", { replace: true });
+    navigate(backTo, { replace: true });
   };
 
   if (loading || !pairId) return <Loading />;
@@ -93,9 +89,13 @@ export const ItemDetailPage = () => {
          style={{ background: "var(--color-bg)", fontFamily: "var(--font-sans)" }}>
       {/* ヘッダー */}
       <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => navigate("/home")}
-                className="text-xl" style={{ color: "var(--color-text-mid)" }}>
-          ←
+        <button onClick={() => navigate(backTo)}
+                style={{ background: "none", border: "none", cursor: "pointer",
+                         padding: "4px 8px 4px 0", color: "var(--color-text-mid)" }}>
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <path d="M11 4L6 9l5 5" stroke="currentColor" strokeWidth="1.8"
+                  strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
         </button>
         {editingTitle ? (
           <input

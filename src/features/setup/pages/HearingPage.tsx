@@ -5,7 +5,10 @@ import { useAuth } from "../../auth/hooks/useAuth";
 import { getUserPairId } from "../../pair/services/pairService";
 import { db } from "../../../firebase/firestore";
 import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
-import { GENRES, PREFECTURES } from "../../../lib/constants";
+import {
+  GENRES, PREFECTURES,
+  RANGE_OPTIONS, CHILDREN_OPTIONS, TRANSPORT_OPTIONS, BUDGET_OPTIONS, INDOOR_OPTIONS,
+} from "../../../lib/constants";
 import type { Hearing } from "../../../types";
 
 const TOTAL_STEPS = 6;
@@ -133,11 +136,7 @@ export const HearingPage = () => {
               <option value="">都道府県を選択</option>
               {PREFECTURES.map((p) => <option key={p} value={p}>{p}</option>)}
             </select>
-            {[
-              { id: "county",   label: "県内中心" },
-              { id: "neighbor", label: "隣県まで" },
-              { id: "anywhere", label: "全国OK" },
-            ].map((r) => (
+            {RANGE_OPTIONS.map((r) => (
               <ChoiceButton key={r.id} label={r.label}
                 selected={hearing.range === r.id}
                 onClick={() => update("range", r.id)} />
@@ -151,12 +150,7 @@ export const HearingPage = () => {
             <h2 className="text-lg font-bold text-center" style={{ color: "var(--color-text-main)" }}>
               お子さまはいますか？
             </h2>
-            {[
-              { id: "none",    label: "いない・予定なし" },
-              { id: "infant",  label: "乳幼児あり" },
-              { id: "child",   label: "小学生以上あり" },
-              { id: "planned", label: "今後予定あり" },
-            ].map((c) => (
+            {CHILDREN_OPTIONS.map((c) => (
               <ChoiceButton key={c.id} label={c.label}
                 selected={hearing.children === c.id}
                 onClick={() => update("children", c.id)} />
@@ -170,11 +164,7 @@ export const HearingPage = () => {
             <h2 className="text-lg font-bold text-center" style={{ color: "var(--color-text-main)" }}>
               移動手段は？
             </h2>
-            {[
-              { id: "transit", label: "電車・バスのみ" },
-              { id: "car",     label: "車あり" },
-              { id: "both",    label: "両方使う" },
-            ].map((t) => (
+            {TRANSPORT_OPTIONS.map((t) => (
               <ChoiceButton key={t.id} label={t.label}
                 selected={hearing.transport === t.id}
                 onClick={() => update("transport", t.id)} />
@@ -191,13 +181,7 @@ export const HearingPage = () => {
             <p className="text-sm text-center" style={{ color: "var(--color-text-mid)" }}>
               1回あたり・ふたり（家族）合計
             </p>
-            {[
-              { id: "3000",  label: "〜3,000円" },
-              { id: "5000",  label: "〜5,000円" },
-              { id: "10000", label: "〜10,000円" },
-              { id: "30000", label: "〜30,000円" },
-              { id: "any",   label: "気にしない" },
-            ].map((b) => (
+            {BUDGET_OPTIONS.map((b) => (
               <ChoiceButton key={b.id} label={b.label}
                 selected={hearing.budget === b.id}
                 onClick={() => update("budget", b.id)} />
@@ -211,11 +195,7 @@ export const HearingPage = () => {
             <h2 className="text-lg font-bold text-center" style={{ color: "var(--color-text-main)" }}>
               屋内・屋外の好みは？
             </h2>
-            {[
-              { id: "outdoor", label: "屋外が好き" },
-              { id: "indoor",  label: "屋内が好き" },
-              { id: "both",    label: "どちらでもOK" },
-            ].map((i) => (
+            {INDOOR_OPTIONS.map((i) => (
               <ChoiceButton key={i.id} label={i.label}
                 selected={hearing.indoor === i.id}
                 onClick={() => update("indoor", i.id)} />

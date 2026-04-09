@@ -7,12 +7,12 @@
 
 /* ── カスタムカラー・フォント定義（v4方式） ── */
 @theme {
-  --color-bg:            #F5F0E8;
+  --color-bg:            #F5F0E8;   /* ロゴ背景クリーム */
   --color-surface:       #FDFAF6;
-  --color-primary:       #C4622D;
-  --color-primary-light: #F5E6DE;
-  --color-secondary:     #f7a17c;
-  --color-accent:        #f7cf7c;
+  --color-primary:       #1E2D5A;   /* "Log" ネイビー */
+  --color-primary-light: #E8ECF4;   /* ネイビー薄め */
+  --color-secondary:     #9B6847;   /* "Kata" コパー */
+  --color-accent:        #C9A96E;   /* ゴールドボーダー */
   --color-text-main:     #1A1410;
   --color-text-mid:      #8B7355;
   --color-text-soft:     #B8A898;
@@ -62,7 +62,7 @@ body {
   .auth-title {
     font-size: 26px;
     font-weight: 700;
-    color: var(--color-primary);
+    font-family: var(--font-serif);
   }
 
   .auth-sub {
@@ -143,7 +143,7 @@ body {
     font-size: 16px;
     font-weight: 700;
     cursor: pointer;
-    box-shadow: 0 4px 16px rgba(124,106,247,0.35);
+    box-shadow: 0 4px 16px rgba(30,45,90,0.25);
     transition: transform 0.18s ease;
   }
 

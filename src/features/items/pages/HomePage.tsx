@@ -1,34 +1,22 @@
 // src/features/items/pages/HomePage.tsx
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../../auth/hooks/useAuth";
 import { useItems } from "../hooks/useItems";
 import { Loading } from "../../../components/Loading";
-import { getUserPairId, getDisplayName } from "../../pair/services/pairService";
+import { getDisplayName } from "../../pair/services/pairService";
+import { usePair } from "../../../contexts/PairContext";
 import { db } from "../../../firebase/firestore";
 import { doc, getDoc } from "firebase/firestore";
+import { CATEGORY_STYLE } from "../../../lib/constants";
 import type { Item, Category } from "../../../types";
 
 type Filter = "all" | Category;
 
-const CATEGORY_STYLE: Record<string, { bg: string; emoji: string }> = {
-  映画:     { bg: "linear-gradient(135deg, #2A3A5C, #0D1428)", emoji: "🎬" },
-  本:       { bg: "linear-gradient(135deg, #3D2B14, #1E1408)", emoji: "📚" },
-  ゲーム:   { bg: "linear-gradient(135deg, #2A1840, #110A1E)", emoji: "🎮" },
-  音楽:     { bg: "linear-gradient(135deg, #0E2828, #061414)", emoji: "🎧" },
-  おでかけ: { bg: "linear-gradient(135deg, #2A4A3A, #152A20)", emoji: "🗺️" },
-  食事:     { bg: "linear-gradient(135deg, #5C2A1A, #3A1410)", emoji: "🍽️" },
-  スポーツ: { bg: "linear-gradient(135deg, #1A3A5C, #0D1E3A)", emoji: "🏃" },
-  その他:   { bg: "linear-gradient(135deg, #3A3A2A, #1E1E14)", emoji: "✨" },
-};
-
 const CATEGORIES: Category[] = ["おでかけ", "映画", "食事", "本", "ゲーム", "音楽", "スポーツ", "その他"];
 
 export const HomePage = () => {
-  const { user } = useAuth();
   const navigate = useNavigate();
-  const [pairId, setPairId] = useState<string | null>(null);
-  const [pairLoading, setPairLoading] = useState(true);
+  const { pairId, loading: pairLoading } = usePair();
   const [pairNames, setPairNames] = useState("");
   const { items, loading, setStatus, toggleIsWant } = useItems(pairId);
 
@@ -37,14 +25,10 @@ export const HomePage = () => {
   const [tryOpen, setTryOpen] = useState(false);
 
   useEffect(() => {
-    if (!user) return;
+    if (pairLoading) return;
+    if (!pairId) { navigate("/", { replace: true }); return; }
     (async () => {
-      const id = await getUserPairId(user.uid);
-      if (!id) { navigate("/", { replace: true }); return; }
-      setPairId(id);
-      setPairLoading(false);
-
-      const pairSnap = await getDoc(doc(db, "pairs", id));
+      const pairSnap = await getDoc(doc(db, "pairs", pairId));
       if (!pairSnap.exists()) return;
       const members = pairSnap.data().members as string[];
       const names = await Promise.all(members.map((uid) => getDisplayName(uid)));
@@ -53,7 +37,7 @@ export const HomePage = () => {
         setPairNames(`${validNames[0]} & ${validNames[1]}`);
       }
     })();
-  }, [user, navigate]);
+  }, [pairId, pairLoading, navigate]);
 
   const activeItems = items.filter((i) => i.status !== "done");
   const doneItems   = items.filter((i) => i.status === "done");
@@ -75,31 +59,46 @@ export const HomePage = () => {
                   background: "var(--color-bg)" }}>
 
       {/* ── ヘッダー ── */}
-      <header style={{ flexShrink: 0, padding: "30px 20px 12px",
+      <header style={{ flexShrink: 0, padding: "12px 20px 10px",
                        background: "var(--color-bg)", borderBottom: "1px solid rgba(0,0,0,0.07)" }}>
-        <div>
-          <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 22, fontWeight: 500,
-                       color: "var(--color-text-main)", letterSpacing: "0.02em", lineHeight: 1 }}>
-            Kata<span style={{ color: "var(--color-primary)" }}>Log</span>
-          </h1>
-          {pairNames && (
-            <p style={{ fontSize: 10, color: "var(--color-text-soft)",
-                        letterSpacing: "0.06em", marginTop: 4 }}>
-              {pairNames}
-            </p>
+        {/* 上段：ロゴ＋ペア名 ↔ 進捗バッジ */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          {/* 左：ロゴ＋ペア名 */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <img src="/logo.png" alt="KataLog" style={{ height: 25 }} />
+            {pairNames && (
+              <p style={{ fontSize: 11, color: "var(--color-text-soft)",
+                          letterSpacing: "0.05em" }}>
+                {pairNames}
+              </p>
+            )}
+          </div>
+          {/* 右：完了バッジ＋リスト総数 */}
+          {items.length > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 3 }}>
+                <span style={{ fontSize: 18, fontWeight: 700, color: "var(--color-primary)",
+                               fontFamily: "var(--font-sans)", lineHeight: 1 }}>
+                  {doneItems.length}
+                </span>
+                <span style={{ fontSize: 10, color: "var(--color-text-soft)" }}>
+                  /{items.length}
+                </span>
+              </div>
+              <span style={{ fontSize: 10, color: "var(--color-text-soft)",
+                             letterSpacing: "0.04em" }}>
+                完了
+              </span>
+            </div>
           )}
         </div>
+        {/* 下段：進捗バー */}
         {items.length > 0 && (
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 14 }}>
-            <div style={{ flex: 1, height: 3, background: "rgba(0,0,0,0.1)",
-                          borderRadius: 2, overflow: "hidden" }}>
-              <div style={{ width: `${progress * 100}%`, height: "100%",
-                            background: "var(--color-primary)", borderRadius: 2,
-                            transition: "width 0.4s ease" }} />
-            </div>
-            <p style={{ fontSize: 11, color: "var(--color-text-mid)", whiteSpace: "nowrap" }}>
-              {doneItems.length} / {items.length} 完了
-            </p>
+          <div style={{ height: 3, background: "rgba(0,0,0,0.08)",
+                        borderRadius: 2, overflow: "hidden", marginTop: 8 }}>
+            <div style={{ width: `${progress * 100}%`, height: "100%",
+                          background: "var(--color-primary)", borderRadius: 2,
+                          transition: "width 0.4s ease" }} />
           </div>
         )}
       </header>
@@ -233,17 +232,14 @@ export const HomePage = () => {
                     borderTop: "1px solid rgba(0,0,0,0.08)" }}>
         <div style={{ display: "flex", padding: "10px 0 6px" }}>
           {NAV_ITEMS.map(({ path, label, icon }) => {
-            const active = location.pathname === path;
             return (
               <button key={path} onClick={() => navigate(path)}
                       style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center",
                                gap: 3, background: "transparent", border: "none", cursor: "pointer",
-                               color: active ? "var(--color-text-main)" : "var(--color-text-mid)" }}>
+                               color: "var(--color-text-mid)" }}>
                 {icon}
-                {active && <div style={{ width: 4, height: 4, borderRadius: "50%",
-                                         background: "var(--color-primary)" }} />}
                 <span style={{ fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase",
-                               fontWeight: active ? 500 : 400, fontFamily: "var(--font-sans)" }}>
+                               fontWeight: 500, fontFamily: "var(--font-sans)" }}>
                   {label}
                 </span>
               </button>
@@ -469,7 +465,7 @@ const NAV_ITEMS = [
     </svg>,
   },
   {
-    path: "/settings", label: "Settings",
+    path: "/settings", label: "Setting",
     icon: <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
       <circle cx="11" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.3"/>
       <path d="M4 19c0-3.9 3.1-7 7-7s7 3.1 7 7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
