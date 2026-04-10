@@ -40,8 +40,8 @@ export const AppRoutes = () => {
               <Route path="/home/:itemId" element={<ItemDetailPage />} />
               <Route path="/suggest" element={<SuggestPage />} />
               <Route path="/memory" element={<MemoryPage />} />
-              <Route path="/settings" element={<SettingsPage />} />
-              <Route path="/settings/inquiry" element={<InquiryPage />} />
+              <Route path="/setting" element={<SettingsPage />} />
+              <Route path="/setting/inquiry" element={<InquiryPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
             </PairProvider>

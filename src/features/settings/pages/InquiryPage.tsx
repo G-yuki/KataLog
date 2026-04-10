@@ -74,7 +74,7 @@ export const InquiryPage = () => {
                        borderBottom: "1px solid rgba(0,0,0,0.07)" }}>
         {step !== "done" && (
           <button
-            onClick={() => step === "confirm" ? setStep("form") : navigate("/settings")}
+            onClick={() => step === "confirm" ? setStep("form") : navigate("/setting")}
             style={{ background: "none", border: "none", cursor: "pointer",
                      padding: "4px 8px 4px 0", color: "var(--color-text-mid)" }}>
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none">

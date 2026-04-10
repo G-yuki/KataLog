@@ -180,7 +180,7 @@ export const SettingsPage = () => {
         {/* サポート */}
         <Section label="サポート">
           <Row label="お問い合わせ">
-            <button onClick={() => navigate("/settings/inquiry")}
+            <button onClick={() => navigate("/setting/inquiry")}
                     style={{ background: "none", border: "none", cursor: "pointer",
                              color: "var(--color-primary)", fontSize: 13, fontWeight: 500,
                              display: "flex", alignItems: "center", gap: 4 }}>

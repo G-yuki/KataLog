@@ -161,14 +161,13 @@ export const PairSetupPage = () => {
         <p className="text-sm text-center leading-relaxed"
            style={{ color: "var(--color-text-mid)" }}>
           アプリ内での表示名を入力してください。<br />
-          例：「あかり」「けんじ」
         </p>
 
         <input
           type="text"
           className="w-full max-w-xs border-2 rounded-2xl px-4 py-3 text-base font-medium outline-none transition-colors"
           style={{ borderColor: "var(--color-border)", color: "var(--color-text-main)" }}
-          placeholder="例：あかり"
+          placeholder=""
           maxLength={10}
           value={nickname}
           onChange={(e) => setNickname(e.target.value)}
@@ -193,10 +192,10 @@ export const PairSetupPage = () => {
   // ── ペア作成・参加 ────────────────────────────────
   return (
     <div className="flex flex-col items-center justify-center min-h-screen px-6 gap-4">
-      <p className="text-4xl mb-2">💑</p>
+      <p className="text-4xl mb-2">🔗</p>
       <h2 className="text-xl font-bold text-center"
           style={{ color: "var(--color-text-main)" }}>
-        パートナーとつながろう
+        パートナーと繋がろう
       </h2>
 
       {!pairId ? (

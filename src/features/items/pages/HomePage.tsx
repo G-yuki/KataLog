@@ -465,7 +465,7 @@ const NAV_ITEMS = [
     </svg>,
   },
   {
-    path: "/settings", label: "Setting",
+    path: "/setting", label: "Setting",
     icon: <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
       <circle cx="11" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.3"/>
       <path d="M4 19c0-3.9 3.1-7 7-7s7 3.1 7 7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
