@@ -55,6 +55,23 @@ service cloud.firestore {
 
         allow read, write: if isPairMember();
       }
+
+      // ── 仮保存アイテム（スワイプマッチング用） ──
+      match /pendingItems/{pendingItemId} {
+        function isPairMember() {
+          let pair = get(/databases/$(database)/documents/pairs/$(pairId));
+          return request.auth != null
+                 && request.auth.uid in pair.data.members;
+        }
+
+        allow read, write: if isPairMember();
+      }
+    }
+
+    // ── お問い合わせ ──
+    match /inquiries/{inquiryId} {
+      // 認証済みユーザーのみ作成可（読み取り・変更・削除は管理者のみ）
+      allow create: if request.auth != null;
     }
   }
 }

@@ -3,8 +3,11 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/hooks/useAuth";
 import { getUserPairId } from "../../pair/services/pairService";
+import { useGenerateItems } from "../hooks/useGenerateItems";
+import { savePendingItemsDraft } from "../../items/services/itemService";
 import { db } from "../../../firebase/firestore";
 import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { Loading } from "../../../components/Loading";
 import {
   GENRES, PREFECTURES,
   RANGE_OPTIONS, CHILDREN_OPTIONS, TRANSPORT_OPTIONS, BUDGET_OPTIONS, INDOOR_OPTIONS,
@@ -16,6 +19,7 @@ const TOTAL_STEPS = 6;
 export const HearingPage = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { generate, loading: generating } = useGenerateItems();
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,15 +65,25 @@ export const HearingPage = () => {
     try {
       const pairId = await getUserPairId(user.uid);
       if (!pairId) throw new Error("pairId not found");
+
+      // ヒアリング保存
       await updateDoc(doc(db, "pairs", pairId), {
         hearing: { ...hearing, updatedAt: serverTimestamp() },
       });
+
+      // AI生成 → pendingItems として保存（両者がスワイプ前に参照）
+      const drafts = await generate(hearing as Parameters<typeof generate>[0]);
+      if (!drafts) throw new Error("generation failed");
+      await savePendingItemsDraft(pairId, drafts);
+
       navigate("/setup/swipe");
     } catch {
-      setError("保存に失敗しました。もう一度お試しください。");
+      setError("リストの生成に失敗しました。もう一度お試しください。");
       setSaving(false);
     }
   };
+
+  if (generating) return <Loading message="AIがリストを生成中..." />;
 
   return (
     <div className="flex flex-col min-h-screen px-6 pt-12 pb-8">
@@ -229,7 +243,7 @@ export const HearingPage = () => {
           onClick={handleNext}
           disabled={!canNext() || saving}
         >
-          {saving ? "保存中..." : step === TOTAL_STEPS ? "リストを生成する" : "次へ"}
+          {saving ? "生成中..." : step === TOTAL_STEPS ? "リストを生成する" : "次へ"}
         </button>
       </div>
     </div>

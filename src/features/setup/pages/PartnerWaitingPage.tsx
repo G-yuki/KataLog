@@ -35,12 +35,12 @@ export const PartnerWaitingPage = () => {
     <div className="flex flex-col items-center justify-center min-h-screen px-6 gap-6 text-center">
       <p className="text-6xl">⌛</p>
       <h2 className="text-xl font-bold" style={{ color: "var(--color-text-main)" }}>
-        もうすぐリストが完成します！
+        リストを準備中です
       </h2>
       <p className="text-sm leading-relaxed" style={{ color: "var(--color-text-mid)" }}>
-        パートナーと一緒に質問に答えて、<br />
-        ふたりだけの<br />
-        やりたいことリストを完成させよう！
+        相手がヒアリングを終えると<br />
+        スワイプ画面が表示されます。<br />
+        このままお待ちください。
       </p>
       <div className="flex gap-2 mt-2">
         {[0, 1, 2].map((i) => (
@@ -55,7 +55,7 @@ export const PartnerWaitingPage = () => {
         ))}
       </div>
       <p className="text-xs" style={{ color: "var(--color-text-soft)" }}>
-        パートナーがスワイプ中...⌛
+        相手のヒアリング完了を待っています...
       </p>
     </div>
   );
