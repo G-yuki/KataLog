@@ -126,7 +126,7 @@ export const HomePage = () => {
         {/* Go!! セクション */}
         {goItems.length > 0 && (
           <div style={{ borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
-            <SectionLabel>Go!! — 最優先リスト</SectionLabel>
+            <SectionLabel>GO!! — 最優先リスト</SectionLabel>
             <div style={{ padding: "0 20px 12px", display: "flex", gap: 10,
                           overflowX: "auto", scrollbarWidth: "none" }}>
               {goItems.map((item) => (
@@ -142,7 +142,7 @@ export const HomePage = () => {
         {/* Good カードグリッド */}
         {filteredGood.length > 0 ? (
           <>
-            <SectionLabel style={{ paddingTop: 10 }}>Good — やりたいリスト</SectionLabel>
+            <SectionLabel style={{ paddingTop: 10 }}>GOOD — やりたいリスト</SectionLabel>
             <div style={{ padding: "0 20px 4px",
                           display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               {filteredGood.map((item) => (
@@ -168,7 +168,7 @@ export const HomePage = () => {
           </div>
         )}
 
-        {/* Try? トグル（片方がPassしたアイテム） */}
+        {/* Try トグル（片方がPassしたアイテム） */}
         {tryItems.length > 0 && (
           <>
             <button onClick={() => setTryOpen((o) => !o)}
@@ -179,8 +179,8 @@ export const HomePage = () => {
               <span style={{ fontSize: 11, color: "var(--color-text-mid)",
                              letterSpacing: "0.06em", whiteSpace: "nowrap",
                              fontFamily: "var(--font-sans)" }}>
-                {tryOpen ? `Try? ${tryItems.length}件を隠す`
-                         : `Try? — 試してみる？ ${tryItems.length}件`}
+                {tryOpen ? `TRY ${tryItems.length}件を隠す`
+                         : `TRY — 試してみる？ ${tryItems.length}件`}
               </span>
               <div style={{ flex: 1, height: 1, background: "rgba(0,0,0,0.08)" }} />
             </button>

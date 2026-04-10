@@ -1,7 +1,7 @@
 import { setGlobalOptions } from "firebase-functions";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI, SchemaType, type Schema } from "@google/generative-ai";
 
 setGlobalOptions({ region: "asia-northeast1", maxInstances: 10 });
 
@@ -80,45 +80,60 @@ export const generateItems = onCall(
 - 移動手段：${transportLabel[hearing.transport] ?? hearing.transport}
 - 予算（1回あたり・ふたり合計）：${budgetLabel[hearing.budget] ?? hearing.budget}
 - 屋内/屋外：${indoorLabel[hearing.indoor] ?? hearing.indoor}
-${hearing.freetext ? `- 自由入力：${hearing.freetext}` : ""}
+${hearing.freetext ? `- 自由入力（最優先で反映すること）：${hearing.freetext}` : ""}
 
-【出力形式】
-JSON配列のみを返してください。他のテキストは一切含めないこと。
-
-[
-  {
-    "title": "タイトル（15文字以内）",
-    "category": "おでかけ|映画|本|ゲーム|食事|音楽|スポーツ|その他",
-    "type": "outdoor|indoor",
-    "difficulty": "easy|special"
-  }
-]
+【カテゴリ定義】（必ずいずれか1つを選ぶこと）
+- おでかけ：観光・旅行・テーマパーク・温泉・自然・アウトドア・ドライブ・散歩・アート・美術館など外出を伴う体験全般
+- 食事：レストラン・カフェ・食べ歩き・料理体験・グルメイベントなど食に関する体験
+- 映画：映画館・映画鑑賞・ドラマ視聴など
+- 本：読書・書店めぐり・図書館・文学・マンガなど
+- ゲーム：ゲームセンター・ボードゲームカフェ・テレビゲーム・eスポーツなど
+- 音楽：ライブ・コンサート・カラオケ・楽器演奏・音楽フェスなど
+- スポーツ：スポーツ観戦・スポーツ体験・フィットネス・アウトドアスポーツなど
+- その他：上記のどれにも明確に当てはまらない体験のみ（極力使わないこと）
 
 【ルール】
 - title は15文字以内
-- category は必ず上記8種類のいずれか
-- type: outdoor=屋外・移動が必要、indoor=自宅・室内で完結
+- category は上記8種類のいずれか。「その他」は上記7カテゴリのどれにも当てはまらない場合のみ使うこと
+- 50件のうち「その他」は最大3件まで。違反した場合は超過分を適切なカテゴリに変更してから出力すること
+- 件数が50件に満たない場合は追加して必ず50件にすること
+- type: outdoor=外出・移動が必要、indoor=自宅・室内で完結
 - difficulty: easy=気軽にできる、special=少し特別・準備が必要
 - 50件すべて異なる体験にすること
 - ヒアリングの好みを反映した具体的なタイトルにすること`;
 
+  const responseSchema: Schema = {
+    type: SchemaType.ARRAY,
+    items: {
+      type: SchemaType.OBJECT,
+      properties: {
+        title:      { type: SchemaType.STRING },
+        category:   { type: SchemaType.STRING, format: "enum", enum: ["おでかけ","食事","映画","本","ゲーム","音楽","スポーツ","その他"] },
+        type:       { type: SchemaType.STRING, format: "enum", enum: ["outdoor","indoor"] },
+        difficulty: { type: SchemaType.STRING, format: "enum", enum: ["easy","special"] },
+      },
+      required: ["title","category","type","difficulty"],
+    },
+  };
+
   try {
     const genAI = new GoogleGenerativeAI(geminiApiKey.value());
-    const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
+    const model = genAI.getGenerativeModel({
+      model: "gemini-3.1-flash-lite-preview",
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema,
+      },
+    });
     const result = await model.generateContent(prompt);
     const text = result.response.text();
-
-    // JSON部分のみ抽出
-    const jsonMatch = text.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) {
-      throw new HttpsError("internal", "AI応答のパースに失敗しました。");
-    }
-
-    const items = JSON.parse(jsonMatch[0]);
+    const items = JSON.parse(text);
     return { items };
   } catch (error) {
     if (error instanceof HttpsError) throw error;
-    throw new HttpsError("internal", "リストの生成に失敗しました。しばらくしてから再試行してください。");
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error("generateItems error:", msg);
+    throw new HttpsError("internal", `生成エラー: ${msg}`);
   }
 });
 
@@ -143,11 +158,16 @@ export const generateMemory = onCall(
 
     const itemList = items
       .map((item, i) => {
-        const rating = item.rating ? `★${item.rating}` : "";
-        const memo   = item.memo   ? `（${item.memo}）` : "";
-        return `${i + 1}. 【${item.category}】${item.title} ${rating}${memo}`;
+        const rating = item.rating != null
+          ? `★${item.rating}${item.rating >= 4 ? "（特に印象的な体験）" : ""}`
+          : "（評価なし）";
+        const memo = item.memo ? `メモ：${item.memo}` : "";
+        return `${i + 1}. 【${item.category}】${item.title} ${rating} ${memo}`.trim();
       })
       .join("\n");
+
+    const minChars = 250;
+    const maxChars = items.length > 10 ? 500 : 350;
 
     const prompt = `あなたはカップル・夫婦向けの思い出記録AIです。
 以下は、ふたりが一緒に体験した「やりたいことリスト」の完了記録です。
@@ -157,10 +177,12 @@ export const generateMemory = onCall(
 ${itemList}
 
 【条件】
-- 200〜350文字程度
+- ${minChars}〜${maxChars}文字程度
 - ふたりへの語りかける口調（「ふたりは〜」「あなたたちは〜」など）
-- 具体的な体験名を織り交ぜて自然な文章に
-- 末尾に、次の体験への期待感を添える
+- 具体的な体験名を織り交ぜて自然な文章にすること
+- 評価★4以上の体験は特に印象的なエピソードがあるように具体的に描写すること
+- 全体のトーンは「懐かしさと期待感が共存する」文体にすること
+- 締めの一文は必ずポジティブかつ具体的な次の行動への言及で終えること
 - JSONや箇条書き不要。本文のみを返すこと`;
 
     try {
@@ -170,7 +192,9 @@ ${itemList}
       return { memory: result.response.text().trim() };
     } catch (error) {
       if (error instanceof HttpsError) throw error;
-      throw new HttpsError("internal", "思い出の生成に失敗しました。");
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error("generateMemory error:", msg);
+      throw new HttpsError("internal", `生成エラー: ${msg}`);
     }
   }
 );

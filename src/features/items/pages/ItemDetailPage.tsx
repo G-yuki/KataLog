@@ -140,6 +140,27 @@ export const ItemDetailPage = () => {
         <Tag label={item.type === "outdoor" ? "屋外" : "屋内"} />
       </div>
 
+      {/* Google マップリンク（おでかけ・食事のみ） */}
+      {(item.category === "おでかけ" || item.category === "食事") && (
+        <a
+          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.title)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="card p-4 mb-4 flex items-center gap-3"
+          style={{ textDecoration: "none", display: "flex" }}
+        >
+          <span style={{ fontSize: 22, flexShrink: 0 }}>🗺️</span>
+          <span style={{ flex: 1, fontSize: 14, fontWeight: 600,
+                         color: "var(--color-primary)" }}>
+            Google マップで探す
+          </span>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0 }}>
+            <path d="M3 11L11 3M11 3H6M11 3V8" stroke="var(--color-primary)"
+                  strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </a>
+      )}
+
       {/* 完了チェック */}
       <div className="card p-4 mb-4">
         <div className="flex items-center justify-between">

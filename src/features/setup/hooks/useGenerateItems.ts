@@ -18,8 +18,10 @@ export const useGenerateItems = () => {
       );
       const result = await fn({ hearing });
       return result.data.items;
-    } catch {
-      setError("リストの生成に失敗しました。もう一度お試しください。");
+    } catch (e) {
+      const msg = (e as { message?: string })?.message ?? "リストの生成に失敗しました。もう一度お試しください。";
+      console.error("useGenerateItems:", msg);
+      setError(msg);
       return null;
     } finally {
       setLoading(false);

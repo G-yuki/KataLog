@@ -25,21 +25,21 @@ export const SwipeTutorial = ({ onClose, isPartner = false }: Props) => (
       )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 12, margin: "16px 0 20px" }}>
-        <Row icon="⇧" label="Go!!" color="#f43f5e"
+        <Row icon="⇧" label="GO!!" color="#f43f5e"
              desc="絶対やりたい！最優先リストに入ります" />
-        <Row icon="⇨" label="Good" color="var(--color-primary)"
+        <Row icon="⇨" label="GOOD" color="var(--color-primary)"
              desc="やりたいリストに入ります" />
-        <Row icon="⇦" label="Pass" color="var(--color-text-soft)"
-             desc="スキップ。片方だけPassすると「Try?」候補に" />
+        <Row icon="⇦" label="PASS" color="var(--color-text-soft)"
+             desc="スキップ。片方だけPassすると「TRY」候補に" />
       </div>
 
       <div style={{ background: "var(--color-primary-light)", borderRadius: 12,
                     padding: "12px 16px", marginBottom: 20 }}>
         <p style={{ fontSize: 11, color: "var(--color-text-mid)", lineHeight: 1.7 }}>
           <b style={{ color: "var(--color-text-main)" }}>マッチングルール</b><br />
-          両方 Go!! →  ❤️最優先リスト (Go!!)<br />
-          両方 Good / どちらかが Go!! → やりたいリスト (Good)<br />
-          どちらかが Pass → お試しリスト (Try?) に保存<br />
+          両方 Go!! →  ❤️最優先リスト (GO!!)<br />
+          両方 Good / どちらかが Go!! → やりたいリスト (GOOD)<br />
+          どちらかが Pass → お試しリスト (TRY) に保存<br />
           両方 Pass → リストには入りません
         </p>
       </div>

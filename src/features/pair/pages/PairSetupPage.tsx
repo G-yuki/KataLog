@@ -14,7 +14,7 @@ import {
 } from "../services/pairService";
 import { generateInviteUrl, getInviteParams } from "../../../lib/token";
 import { db } from "../../../firebase/firestore";
-import { doc, onSnapshot } from "firebase/firestore";
+import { doc, getDoc, onSnapshot } from "firebase/firestore";
 
 type Step = "loading" | "nickname" | "pair";
 
@@ -44,10 +44,36 @@ export const PairSetupPage = () => {
         getUserPairId(user.uid),
       ]);
 
-      // すでにペア所属 → ホームへ
+      // すでにペア所属 → ペアの状態を確認して適切な画面へ
       if (existingPairId) {
-        navigate("/home", { replace: true });
-        return;
+        const pairSnap = await getDoc(doc(db, "pairs", existingPairId));
+        if (pairSnap.exists()) {
+          const data = pairSnap.data();
+
+          // マッチング完了済み → ホーム
+          if (data.matchingFinalized) {
+            navigate("/home", { replace: true });
+            return;
+          }
+
+          // パートナー未参加 → 招待リンク画面に戻す
+          if ((data.members as string[]).length === 1) {
+            setPairId(existingPairId);
+            setInviteUrl(generateInviteUrl(existingPairId, data.inviteToken as string));
+            setStep("pair");
+            return;
+          }
+
+          // パートナー参加済み・セットアップ未完了 → ロール別に遷移
+          const isCreator = (data.members as string[])[0] === user.uid;
+          if (isCreator) {
+            navigate(data.hearing ? "/setup/swipe" : "/setup", { replace: true });
+          } else {
+            navigate("/setup/partner-waiting", { replace: true });
+          }
+          return;
+        }
+        // ペアドキュメントが存在しない場合は通常フローへ
       }
 
       const inviteParams = getInviteParams();

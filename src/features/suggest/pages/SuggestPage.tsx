@@ -27,6 +27,7 @@ const INDOOR_LABELS    = toMap(INDOOR_OPTIONS);
 export const SuggestPage = () => {
   const navigate = useNavigate();
   const { generate, loading: generating } = useGenerateItems();
+  const [genError, setGenError] = useState<string | null>(null);
 
   const { pairId, loading: pairLoading } = usePair();
   const [step, setStep] = useState<Step>("home");
@@ -54,6 +55,7 @@ export const SuggestPage = () => {
   const handleGenerate = async (overrideHearing?: Partial<Hearing>) => {
     const base = overrideHearing ?? hearing;
     if (!base) return;
+    setGenError(null);
     setStep("generating");
     const items = await generate(base as Hearing);
     if (items) {
@@ -61,6 +63,7 @@ export const SuggestPage = () => {
       setSelected(new Set());
       setStep("results");
     } else {
+      setGenError("提案の生成に失敗しました。もう一度お試しください。");
       setStep("home");
     }
   };
@@ -161,13 +164,30 @@ export const SuggestPage = () => {
               </div>
             )}
 
+            {genError && (
+              <div style={{ padding: "12px 14px", background: "#FEF2F2",
+                            border: "1px solid #FECACA", borderRadius: 10,
+                            fontSize: 13, color: "#DC2626", lineHeight: 1.6 }}>
+                {genError}
+              </div>
+            )}
+
+            {!hearing && (
+              <div style={{ padding: "12px 14px", background: "#FFFBEB",
+                            border: "1px solid #FDE68A", borderRadius: 10,
+                            fontSize: 13, color: "#92400E", lineHeight: 1.6 }}>
+                プランがまだ設定されていません。「プランを更新してから提案」から設定してください。
+              </div>
+            )}
+
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <button
                 onClick={() => handleGenerate()}
                 disabled={!hearing}
                 style={{ width: "100%", padding: "16px", background: "var(--color-primary)",
                          color: "#fff", border: "none", borderRadius: 14, fontSize: 15,
-                         fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-sans)" }}>
+                         fontWeight: 600, cursor: hearing ? "pointer" : "default",
+                         opacity: hearing ? 1 : 0.4, fontFamily: "var(--font-sans)" }}>
                 ✦ AIに提案してもらう
               </button>
               <button

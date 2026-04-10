@@ -72,5 +72,5 @@ export const CATEGORY_STYLE: Record<string, { bg: string; emoji: string }> = {
   おでかけ: { bg: "linear-gradient(135deg, #2A4A3A, #152A20)", emoji: "🗺️" },
   食事:     { bg: "linear-gradient(135deg, #5C2A1A, #3A1410)", emoji: "🍽️" },
   スポーツ: { bg: "linear-gradient(135deg, #1A3A5C, #0D1E3A)", emoji: "🏃" },
-  その他:   { bg: "linear-gradient(135deg, #3A3A2A, #1E1E14)", emoji: "🚩" },
+  その他:   { bg: "linear-gradient(135deg, #3A3A2A, #1E1E14)", emoji: "🧭" },
 };
