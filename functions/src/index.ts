@@ -149,7 +149,7 @@ export const generateMemory = onCall(
       throw new HttpsError("unauthenticated", "ログインが必要です。");
     }
 
-    const { items, period } = request.data as {
+    const { items, todoItems, period } = request.data as {
       items: Array<{
         title: string;
         category: string;
@@ -157,6 +157,7 @@ export const generateMemory = onCall(
         memo: string | null;
         completedMonth?: string;
       }> | undefined;
+      todoItems?: Array<{ title: string; category: string }>;
       period?: string;
     };
 
@@ -164,38 +165,59 @@ export const generateMemory = onCall(
       throw new HttpsError("invalid-argument", "完了済みアイテムが必要です。");
     }
 
-    const itemList = items
+    // 完了済み：古い順（時系列）に並べる
+    const chronological = [...items].reverse();
+
+    const itemList = chronological
       .map((item, i) => {
         const rating = item.rating != null ? `★${item.rating}` : "評価なし";
-        const month = item.completedMonth ?? "";
+        const month = item.completedMonth ? `${item.completedMonth}` : "";
         const memo = item.memo ? ` メモ：${item.memo}` : "";
         return `${i + 1}. 【${item.category}】${item.title} ${rating}${month ? `・${month}` : ""}${memo}`.trim();
       })
       .join("\n");
 
-    const periodLabel = period ?? "記録中";
+    const todoList = todoItems && todoItems.length > 0
+      ? todoItems.map((t) => `- 【${t.category}】${t.title}`).join("\n")
+      : "（なし）";
+
+    const periodLabel = period && period !== "はじまり" ? period : "はじまり";
 
     const prompt = `以下のログデータをもとに、指定フォーマット通りに出力してください。
 
-【ふたりの期間】${periodLabel}
-
-【ログデータ】
+【完了した体験（時系列順）】
 ${itemList}
 
+【まだ未完了の体験】
+${todoList}
+
 【出力フォーマット】
-ふたりの${periodLabel}
-今期のベスト体験
-🏆 [体験名]（★[評価]・[月]）
-よく行ったジャンル
-[カテゴリ] [■の数で回数を表現] [回数]回
-※■は1回につき1つ。最大8個まで。
-ひとことで言うと
-「[体験全体を表す短いコピー1文]」
+
+■ ふたりの${periodLabel}をひとことで
+→ 体験全体を表す短いコピーを1文で（例：「動き続けた春。」）
+
+■ この期間のハイライト
+→ 最も評価が高かった体験を2〜3つ、以下の形式で：
+
+[体験名]（[カテゴリ] / [月]）
+★[評価]
+"[メモをもとにした一言エピソード]"
+
+■ ふたりの${periodLabel}の流れ
+→ 時系列で体験を並べ、季節や変化が伝わる短い文章で描写する。
+箇条書きではなく、ひとつながりの物語として書く。
+1体験につき2〜3文。
+
+■ 次の${periodLabel}に向けて
+→ まだ未完了のアイテムの中から、次に挑戦してほしい体験を
+AIが1〜2つ選んで提案する。理由も添える。
 
 【ルール】
-- 余計な前置き・説明文は不要
-- ひとことは20文字以内
-- メモがない体験は評価とカテゴリだけで判断する
+- 全体で300〜400文字程度
+- 体験がない月はスキップする
+- メモがない体験は評価とカテゴリだけで描写する
+- 感情的・詩的な表現を意識する
+- 「ふたり」という言葉を軸に書く
 - フォーマット通りに出力する。それ以外は何も書かない`;
 
     try {

@@ -140,10 +140,9 @@ export const removePairPartner = async (
     hearing: null,
   });
 
-  // パートナーの pairId をクリア
-  if (partnerUid) {
-    batch.update(doc(db, "users", partnerUid), { pairId: null });
-  }
+  // ※ パートナーの users/{uid} は自分のドキュメントでないためクライアントから更新不可。
+  //   パートナーが次回ログイン時に PairSetupPage でメンバー外を検出し自動クリアする。
+  void partnerUid; // lint 警告抑制
 
   // items / pendingItems を全削除
   const [itemsSnap, pendingSnap] = await Promise.all([

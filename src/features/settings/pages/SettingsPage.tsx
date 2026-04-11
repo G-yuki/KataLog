@@ -75,10 +75,15 @@ export const SettingsPage = () => {
   const handleReinvite = async () => {
     if (!pairId || !user) return;
     setReinviting(true);
-    await removePairPartner(pairId, user.uid);
-    setReinviting(false);
-    setShowReinviteConfirm(false);
-    navigate("/", { replace: true });
+    try {
+      await removePairPartner(pairId, user.uid);
+      setShowReinviteConfirm(false);
+      navigate("/", { replace: true });
+    } catch {
+      alert("処理に失敗しました。もう一度お試しください。");
+    } finally {
+      setReinviting(false);
+    }
   };
 
   const handleReset = async () => {

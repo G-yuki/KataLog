@@ -10,7 +10,7 @@ import { CATEGORY_STYLE } from "../../../lib/constants";
 import { db } from "../../../firebase/firestore";
 import { doc, getDoc, type Timestamp } from "firebase/firestore";
 
-/** Timestamp から "X年Xヶ月" 形式の文字列を計算 */
+/** Timestamp から期間文字列を計算（"X年Xヶ月" または "はじまり"） */
 const calcPeriod = (start: Date): string => {
   const now = new Date();
   const totalMonths =
@@ -18,7 +18,7 @@ const calcPeriod = (start: Date): string => {
     (now.getMonth() - start.getMonth());
   const years = Math.floor(totalMonths / 12);
   const months = totalMonths % 12;
-  if (years === 0 && months === 0) return "1ヶ月未満";
+  if (years === 0 && months === 0) return "はじまり";
   return `${years > 0 ? `${years}年` : ""}${months > 0 ? `${months}ヶ月` : ""}`;
 };
 
@@ -30,6 +30,8 @@ export const MemoryPage = () => {
   const doneItems = items
     .filter((i) => i.status === "done")
     .sort((a, b) => (b.completedAt?.toMillis() ?? 0) - (a.completedAt?.toMillis() ?? 0));
+
+  const todoItems = items.filter((i) => i.status !== "done");
 
   const [generating, setGenerating] = useState(false);
   const [memory, setMemory] = useState<string | null>(null);
@@ -62,6 +64,7 @@ export const MemoryPage = () => {
       const fn = httpsCallable<
         {
           items: { title: string; category: string; rating: number | null; memo: string | null; completedMonth: string }[];
+          todoItems: { title: string; category: string }[];
           period: string;
         },
         { memory: string }
@@ -75,7 +78,8 @@ export const MemoryPage = () => {
           ? `${(i.completedAt as Timestamp).toDate().getMonth() + 1}月`
           : "",
       }));
-      const result = await fn({ items: payload, period });
+      const todoPayload = todoItems.map((i) => ({ title: i.title, category: i.category }));
+      const result = await fn({ items: payload, todoItems: todoPayload, period });
       setMemory(result.data.memory);
     } catch {
       setGenError("生成に失敗しました。もう一度お試しください。");

@@ -14,7 +14,7 @@ import {
 } from "../services/pairService";
 import { generateInviteUrl, getInviteParams, clearInviteParams } from "../../../lib/token";
 import { db } from "../../../firebase/firestore";
-import { doc, getDoc, onSnapshot } from "firebase/firestore";
+import { doc, getDoc, setDoc, onSnapshot } from "firebase/firestore";
 
 type Step = "loading" | "nickname" | "pair";
 
@@ -49,29 +49,36 @@ export const PairSetupPage = () => {
         const pairSnap = await getDoc(doc(db, "pairs", existingPairId));
         if (pairSnap.exists()) {
           const data = pairSnap.data();
+          const members = data.members as string[];
 
-          // マッチング完了済み → ホーム
-          if (data.matchingFinalized) {
-            navigate("/home", { replace: true });
-            return;
-          }
-
-          // パートナー未参加 → 招待リンク画面に戻す
-          if ((data.members as string[]).length === 1) {
-            setPairId(existingPairId);
-            setInviteUrl(generateInviteUrl(existingPairId, data.inviteToken as string));
-            setStep("pair");
-            return;
-          }
-
-          // パートナー参加済み・セットアップ未完了 → ロール別に遷移
-          const isCreator = (data.members as string[])[0] === user.uid;
-          if (isCreator) {
-            navigate(data.hearing ? "/setup/swipe" : "/setup", { replace: true });
+          // 自分がメンバーに含まれていない（相手に除外された）→ pairId をクリアして通常フローへ
+          if (!members.includes(user.uid)) {
+            await setDoc(doc(db, "users", user.uid), { pairId: null }, { merge: true });
+            // fall through to normal flow
           } else {
-            navigate("/setup/partner-waiting", { replace: true });
+            // マッチング完了済み → ホーム
+            if (data.matchingFinalized) {
+              navigate("/home", { replace: true });
+              return;
+            }
+
+            // パートナー未参加 → 招待リンク画面に戻す
+            if (members.length === 1) {
+              setPairId(existingPairId);
+              setInviteUrl(generateInviteUrl(existingPairId, data.inviteToken as string));
+              setStep("pair");
+              return;
+            }
+
+            // パートナー参加済み・セットアップ未完了 → ロール別に遷移
+            const isCreator = members[0] === user.uid;
+            if (isCreator) {
+              navigate(data.hearing ? "/setup/swipe" : "/setup", { replace: true });
+            } else {
+              navigate("/setup/partner-waiting", { replace: true });
+            }
+            return;
           }
-          return;
         }
         // ペアドキュメントが存在しない場合は通常フローへ
       }
