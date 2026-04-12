@@ -2,6 +2,7 @@
 import {
   collection,
   doc,
+  setDoc,
   updateDoc,
   deleteDoc,
   serverTimestamp,
@@ -59,11 +60,18 @@ export const toggleWant = async (
   });
 };
 
-/** メモ・評価を保存 */
+/** メモ・評価・URLなどを保存 */
 export const updateItemDetail = async (
   pairId: string,
   itemId: string,
-  data: { memo?: string | null; rating?: number | null; title?: string }
+  data: {
+    memo?: string | null;
+    rating?: number | null;
+    title?: string;
+    userPlaceUrl?: string | null;
+    placeId?: string | null;
+    placePhotoRef?: string | null;
+  }
 ): Promise<void> => {
   await updateDoc(doc(db, "pairs", pairId, "items", itemId), data);
 };
@@ -112,6 +120,40 @@ export const addSuggestedItems = async (
     });
   });
   await batch.commit();
+};
+
+/** 手動でアイテムを追加 */
+export const addManualItem = async (
+  pairId: string,
+  data: {
+    title: string;
+    category: string;
+    type: string;
+    status: string;
+    rating: number | null;
+    memo: string | null;
+    userPlaceUrl: string | null;
+  }
+): Promise<void> => {
+  const ref = doc(collection(db, "pairs", pairId, "items"));
+  await setDoc(ref, {
+    title: data.title,
+    category: data.category,
+    type: data.type,
+    difficulty: "easy",
+    status: data.status,
+    isWant: false,
+    matchTier: "good",
+    rating: data.status === "done" ? data.rating : null,
+    memo: data.memo,
+    completedAt: data.status === "done" ? serverTimestamp() : null,
+    userPlaceUrl: data.userPlaceUrl,
+    placeId: null,
+    placeName: null,
+    placeRating: null,
+    placePhotoRef: null,
+    createdAt: serverTimestamp(),
+  });
 };
 
 // ── Pending Items（同時スワイプフロー） ────────────────────────────

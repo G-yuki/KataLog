@@ -64,6 +64,7 @@ export interface Item {
   placeName: string | null;
   placeRating: number | null;
   placePhotoRef: string | null;
+  userPlaceUrl?: string | null;
 }
 
 // AI生成時のアイテム（Firestore保存前）

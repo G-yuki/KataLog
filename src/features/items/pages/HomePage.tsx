@@ -9,7 +9,8 @@ import { db } from "../../../firebase/firestore";
 import { doc, getDoc } from "firebase/firestore";
 import { CATEGORY_STYLE } from "../../../lib/constants";
 import { BottomNav } from "../../../components/BottomNav";
-import type { Item, Category } from "../../../types";
+import { addManualItem } from "../services/itemService";
+import type { Item, Category, ItemType, ItemStatus } from "../../../types";
 
 type Filter = "all" | Category;
 
@@ -28,6 +29,35 @@ export const HomePage = () => {
   const [filter, setFilter] = useState<Filter>("all");
   const [doneOpen, setDoneOpen] = useState(false);
   const [tryOpen, setTryOpen] = useState(false);
+
+  // 手動追加モーダル
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newCategory, setNewCategory] = useState<Category>("その他");
+  const [newType, setNewType] = useState<ItemType>("indoor");
+  const [newStatus, setNewStatus] = useState<ItemStatus>("todo");
+  const [newRating, setNewRating] = useState<number | null>(null);
+  const [newMapsUrl, setNewMapsUrl] = useState("");
+  const [newMemo, setNewMemo] = useState("");
+  const [addSaving, setAddSaving] = useState(false);
+
+  const handleAddItem = async () => {
+    if (!pairId || !newTitle.trim()) return;
+    setAddSaving(true);
+    await addManualItem(pairId, {
+      title: newTitle.trim(),
+      category: newCategory,
+      type: newType,
+      status: newStatus,
+      rating: newStatus === "done" ? newRating : null,
+      memo: newMemo.trim() || null,
+      userPlaceUrl: newMapsUrl.trim() || null,
+    });
+    setAddSaving(false);
+    setShowAddModal(false);
+    setNewTitle(""); setNewCategory("その他"); setNewType("indoor");
+    setNewStatus("todo"); setNewRating(null); setNewMapsUrl(""); setNewMemo("");
+  };
 
   useEffect(() => {
     if (pairLoading) return;
@@ -66,33 +96,37 @@ export const HomePage = () => {
       <header style={{ flexShrink: 0, padding: "14px 20px 10px",
                        background: "var(--color-bg)", borderBottom: "1px solid rgba(0,0,0,0.07)",
                        position: "sticky", top: 0, zIndex: 20 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 17, fontWeight: 500,
-                       color: "var(--color-text-main)", letterSpacing: "0.01em" }}>
-            LIST: リスト一覧
-          </h1>
-          {items.length > 0 && (
-            <div style={{ display: "flex", alignItems: "baseline", gap: 3 }}>
-              <span style={{ fontSize: 18, fontWeight: 700, color: "var(--color-primary)",
-                             fontFamily: "var(--font-sans)", lineHeight: 1 }}>
-                {doneItems.length}
-              </span>
-              <span style={{ fontSize: 10, color: "var(--color-text-soft)",
-                             fontFamily: "var(--font-sans)" }}>
+        {/* 左: タイトル + ペア名 ／ 右: ロゴ + 完了数 */}
+        <div style={{ display: "flex", alignItems: "flex-start" }}>
+          <div style={{ flex: 1 }}>
+            <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 16, fontWeight: 600,
+                         color: "var(--color-text-main)", letterSpacing: "0.01em" }}>
+              LIST: リスト一覧
+            </h1>
+            {pairNames && (
+              <p style={{ fontSize: 11, color: "var(--color-text-mid)", marginTop: 3,
+                          fontFamily: "var(--font-sans)", letterSpacing: "0.04em" }}>
+                {pairNames}
+              </p>
+            )}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+            <img src="/logo.png" alt="KataLog" style={{ height: 18, objectFit: "contain" }} />
+            {items.length > 0 && (
+              <p style={{ fontSize: 11, color: "var(--color-text-soft)",
+                          fontFamily: "var(--font-sans)", margin: 0 }}>
+                <span style={{ fontWeight: 600, color: "var(--color-primary)", fontSize: 12 }}>
+                  {doneItems.length}
+                </span>
                 /{items.length} 完了
-              </span>
-            </div>
-          )}
+              </p>
+            )}
+          </div>
         </div>
-        {pairNames && (
-          <p style={{ fontSize: 11, color: "var(--color-text-mid)", marginTop: 3,
-                      fontFamily: "var(--font-sans)", letterSpacing: "0.04em" }}>
-            {pairNames}
-          </p>
-        )}
+        {/* 進捗バー */}
         {items.length > 0 && (
           <div style={{ height: 3, background: "rgba(0,0,0,0.08)",
-                        borderRadius: 2, overflow: "hidden", marginTop: 8 }}>
+                        borderRadius: 2, overflow: "hidden", marginTop: 6 }}>
             <div style={{ width: `${progress * 100}%`, height: "100%",
                           background: "var(--color-primary)", borderRadius: 2,
                           transition: "width 0.4s ease" }} />
@@ -100,21 +134,29 @@ export const HomePage = () => {
         )}
       </header>
 
-      {/* ── フィルター ── */}
-      <div style={{ flexShrink: 0, padding: "10px 20px 8px", display: "flex", gap: 6,
-                    overflowX: "auto", scrollbarWidth: "none",
+      {/* ── フィルター + 追加ボタン ── */}
+      <div style={{ flexShrink: 0, display: "flex", alignItems: "center",
                     background: "var(--color-bg)", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
-        {(["all", ...CATEGORIES] as Filter[]).map((f) => (
-          <button key={f} onClick={() => setFilter(f)}
-                  style={{ flexShrink: 0, fontSize: 11, padding: "5px 13px",
-                           borderRadius: 20, whiteSpace: "nowrap",
-                           fontFamily: "var(--font-sans)", cursor: "pointer",
-                           border: filter === f ? "none" : "1px solid rgba(0,0,0,0.12)",
-                           background: filter === f ? "var(--color-text-main)" : "transparent",
-                           color: filter === f ? "var(--color-bg)" : "#5C4A35" }}>
-            {f === "all" ? "すべて" : f}
-          </button>
-        ))}
+        <div style={{ flex: 1, padding: "10px 0 8px 20px", display: "flex", gap: 6,
+                      overflowX: "auto", scrollbarWidth: "none" }}>
+          {(["all", ...CATEGORIES] as Filter[]).map((f) => (
+            <button key={f} onClick={() => setFilter(f)}
+                    style={{ flexShrink: 0, fontSize: 11, padding: "5px 13px",
+                             borderRadius: 20, whiteSpace: "nowrap",
+                             fontFamily: "var(--font-sans)", cursor: "pointer",
+                             border: filter === f ? "none" : "1px solid rgba(0,0,0,0.12)",
+                             background: filter === f ? "var(--color-text-main)" : "transparent",
+                             color: filter === f ? "var(--color-bg)" : "#5C4A35" }}>
+              {f === "all" ? "すべて" : f}
+            </button>
+          ))}
+        </div>
+        <button onClick={() => setShowAddModal(true)}
+                style={{ flexShrink: 0, padding: "0 16px 0 10px", height: "100%",
+                         background: "none", border: "none", cursor: "pointer",
+                         display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <span style={{ fontSize: 22, color: "var(--color-primary)", lineHeight: 1 }}>+</span>
+        </button>
       </div>
 
       {/* ── スクロールエリア ── */}
@@ -228,11 +270,142 @@ export const HomePage = () => {
 
       {/* ── ボトムナビ ── */}
       <BottomNav />
+
+      {/* ── 手動追加モーダル ── */}
+      {showAddModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
+                      display: "flex", alignItems: "flex-end", zIndex: 100 }}
+             onClick={() => setShowAddModal(false)}>
+          <div onClick={(e) => e.stopPropagation()}
+               style={{ width: "100%", background: "var(--color-bg)", borderRadius: "20px 20px 0 0",
+                        padding: "24px 20px 48px", display: "flex", flexDirection: "column", gap: 16,
+                        maxHeight: "90dvh", overflowY: "auto", scrollbarWidth: "none" }}>
+            <h2 style={{ fontFamily: "var(--font-sans)", fontSize: 17, fontWeight: 500,
+                         color: "var(--color-text-main)", textAlign: "center" }}>
+              アイテムを追加
+            </h2>
+
+            {/* タイトル */}
+            <div>
+              <ModalLabel>タイトル *</ModalLabel>
+              <input value={newTitle} onChange={(e) => setNewTitle(e.target.value)}
+                     maxLength={60} placeholder="体験のタイトル"
+                     style={{ width: "100%", padding: "10px 12px", borderRadius: 8, boxSizing: "border-box",
+                              border: "1px solid var(--color-border)", fontSize: 14, outline: "none",
+                              background: "var(--color-bg)", color: "var(--color-text-main)",
+                              fontFamily: "var(--font-sans)" }} />
+            </div>
+
+            {/* カテゴリ */}
+            <div>
+              <ModalLabel>カテゴリ</ModalLabel>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {CATEGORIES.map((cat) => (
+                  <button key={cat} onClick={() => setNewCategory(cat)}
+                          style={{ fontSize: 12, padding: "5px 12px", borderRadius: 20,
+                                   border: newCategory === cat ? "none" : "1px solid rgba(0,0,0,0.12)",
+                                   background: newCategory === cat ? "var(--color-text-main)" : "transparent",
+                                   color: newCategory === cat ? "var(--color-bg)" : "#5C4A35",
+                                   cursor: "pointer", fontFamily: "var(--font-sans)" }}>
+                    {CATEGORY_STYLE[cat]?.emoji} {cat}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 場所 */}
+            <div>
+              <ModalLabel>場所</ModalLabel>
+              <div style={{ display: "flex", gap: 8 }}>
+                {([["indoor", "🏠 室内"], ["outdoor", "🗺️ 屋外"]] as const).map(([val, lbl]) => (
+                  <button key={val} onClick={() => setNewType(val)}
+                          style={{ flex: 1, padding: "8px", borderRadius: 8, fontSize: 13,
+                                   border: newType === val ? "none" : "1px solid rgba(0,0,0,0.12)",
+                                   background: newType === val ? "var(--color-text-main)" : "transparent",
+                                   color: newType === val ? "var(--color-bg)" : "#5C4A35",
+                                   cursor: "pointer", fontFamily: "var(--font-sans)" }}>
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 状態 */}
+            <div>
+              <ModalLabel>状態</ModalLabel>
+              <div style={{ display: "flex", gap: 8 }}>
+                {([["todo", "⏳ 未完了"], ["done", "✅ 完了"]] as const).map(([val, lbl]) => (
+                  <button key={val} onClick={() => setNewStatus(val)}
+                          style={{ flex: 1, padding: "8px", borderRadius: 8, fontSize: 13,
+                                   border: newStatus === val ? "none" : "1px solid rgba(0,0,0,0.12)",
+                                   background: newStatus === val ? "var(--color-text-main)" : "transparent",
+                                   color: newStatus === val ? "var(--color-bg)" : "#5C4A35",
+                                   cursor: "pointer", fontFamily: "var(--font-sans)" }}>
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 評価（完了時のみ有効） */}
+            <div style={{ opacity: newStatus === "done" ? 1 : 0.35,
+                          pointerEvents: newStatus === "done" ? "auto" : "none" }}>
+              <ModalLabel>評価</ModalLabel>
+              <div style={{ display: "flex", gap: 4 }}>
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button key={star} onClick={() => setNewRating(newRating === star ? null : star)}
+                          style={{ fontSize: 24, background: "none", border: "none", cursor: "pointer" }}>
+                    {newRating != null && star <= newRating ? "⭐" : "☆"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Google Maps URL */}
+            <div>
+              <ModalLabel>Google マップのURL（任意）</ModalLabel>
+              <input value={newMapsUrl} onChange={(e) => setNewMapsUrl(e.target.value)}
+                     placeholder="https://www.google.com/maps/place/..."
+                     style={{ width: "100%", padding: "10px 12px", borderRadius: 8, boxSizing: "border-box",
+                              border: "1px solid var(--color-border)", fontSize: 13, outline: "none",
+                              background: "var(--color-bg)", color: "var(--color-text-main)",
+                              fontFamily: "var(--font-sans)" }} />
+            </div>
+
+            {/* メモ */}
+            <div>
+              <ModalLabel>メモ（任意）</ModalLabel>
+              <textarea value={newMemo} onChange={(e) => setNewMemo(e.target.value)}
+                        maxLength={100} placeholder="メモを入力..."
+                        style={{ width: "100%", padding: "10px 12px", borderRadius: 8, boxSizing: "border-box",
+                                 border: "1px solid var(--color-border)", fontSize: 13, outline: "none",
+                                 background: "var(--color-bg)", color: "var(--color-text-main)",
+                                 fontFamily: "var(--font-sans)", minHeight: 80, resize: "none" }} />
+            </div>
+
+            <button onClick={handleAddItem} disabled={!newTitle.trim() || addSaving}
+                    style={{ padding: "14px", borderRadius: 12, fontSize: 15, fontWeight: 600,
+                             border: "none", cursor: newTitle.trim() ? "pointer" : "default",
+                             background: newTitle.trim() ? "var(--color-primary)" : "rgba(0,0,0,0.1)",
+                             color: newTitle.trim() ? "#fff" : "var(--color-text-soft)",
+                             fontFamily: "var(--font-sans)" }}>
+              {addSaving ? "追加中..." : "リストに追加する"}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
 // ── サブコンポーネント ───────────────────────────────────
+
+const ModalLabel = ({ children }: { children: React.ReactNode }) => (
+  <p style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-soft)",
+              letterSpacing: "0.06em", marginBottom: 6, fontFamily: "var(--font-sans)" }}>
+    {children}
+  </p>
+);
 
 const SectionLabel = ({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) => (
   <p style={{ padding: "16px 20px 10px", fontSize: 10, letterSpacing: "0.14em",

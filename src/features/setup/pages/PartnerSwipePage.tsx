@@ -212,7 +212,6 @@ export const PartnerSwipePage = () => {
           </p>
           <div className="flex gap-2 flex-wrap justify-center">
             <Tag label={current.category} />
-            <Tag label={current.difficulty === "easy" ? "気軽" : "特別"} />
           </div>
           {isGoodHint && (
             <div className="absolute top-4 right-4 text-2xl font-black"

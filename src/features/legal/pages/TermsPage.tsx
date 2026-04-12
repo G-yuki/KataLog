@@ -3,29 +3,27 @@ import { useNavigate } from "react-router-dom";
 
 export const TermsPage = () => {
   const navigate = useNavigate();
-  const canGoBack = window.history.length > 1;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100dvh",
                   background: "var(--color-bg)", fontFamily: "var(--font-sans)" }}>
 
       <header style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 12,
-                       padding: "30px 20px 14px", borderBottom: "1px solid rgba(0,0,0,0.07)",
+                       padding: "14px 20px 10px", borderBottom: "1px solid rgba(0,0,0,0.07)",
                        position: "sticky", top: 0, background: "var(--color-bg)", zIndex: 10 }}>
-        {canGoBack && (
-          <button onClick={() => navigate(-1)}
-                  style={{ background: "none", border: "none", cursor: "pointer",
-                           padding: "4px 8px 4px 0", color: "var(--color-text-mid)" }}>
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-              <path d="M11 4L6 9l5 5" stroke="currentColor" strokeWidth="1.8"
-                    strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </button>
-        )}
-        <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 17, fontWeight: 500,
+        <button onClick={() => navigate(-1)}
+                style={{ background: "none", border: "none", cursor: "pointer",
+                         padding: "4px 8px 4px 0", color: "var(--color-text-mid)" }}>
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <path d="M11 4L6 9l5 5" stroke="currentColor" strokeWidth="1.8"
+                  strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
+        <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 16, fontWeight: 600,
                      color: "var(--color-text-main)", letterSpacing: "0.01em" }}>
-          利用規約
+          TERMS: 利用規約
         </h1>
+        <img src="/logo.png" alt="KataLog" style={{ marginLeft: "auto", height: 18, objectFit: "contain" }} />
       </header>
 
       <div style={{ flex: 1, overflowY: "auto", padding: "24px 20px 48px", maxWidth: 680,

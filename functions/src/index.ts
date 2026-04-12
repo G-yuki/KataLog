@@ -346,38 +346,33 @@ export const enrichItem = onCall(
         headers: {
           "Content-Type": "application/json",
           "X-Goog-Api-Key": mapsServerKey.value(),
-          "X-Goog-FieldMask": "places.id,places.rating,places.photos,places.displayName",
+          "X-Goog-FieldMask": "places.id,places.photos",
         },
         body: JSON.stringify({
           textQuery,
           languageCode: "ja",
-          minRating: 3.5,          // 低評価・関係ない場所を除外
-          pageSize: 5,             // 候補を複数取得して最良を選ぶ
+          minRating: 3.5,          // サーバー側品質フィルター（レスポンスには含まれない）
+          pageSize: 5,
         }),
       });
 
       const data = await res.json() as {
         places?: Array<{
           id: string;
-          rating?: number;
           photos?: Array<{ name: string }>;
-          displayName?: { text: string };
         }>;
       };
 
-      // 評価が高い順にソートして最良の候補を採用
-      const candidates = (data.places ?? [])
-        .filter((p) => p.rating != null && p.photos && p.photos.length > 0);
-      candidates.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+      // 写真ありの最初の候補を採用
+      const candidates = (data.places ?? []).filter((p) => p.photos && p.photos.length > 0);
       const place = candidates[0] ?? null;
 
       // placeId を "" にすることで「検索済みだが未発見」を表し、再呼び出しを防ぐ
       await admin.firestore()
         .doc(`pairs/${pairId}/items/${itemId}`)
         .update({
-          placeId:       place?.id                   ?? "",
-          placeRating:   place?.rating                ?? null,
-          placePhotoRef: place?.photos?.[0]?.name     ?? null,
+          placeId:       place?.id                ?? "",
+          placePhotoRef: place?.photos?.[0]?.name ?? null,
         });
 
       return { ok: true };

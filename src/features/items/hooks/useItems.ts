@@ -45,7 +45,14 @@ export const useItems = (pairId: string | null) => {
 
   const saveDetail = (
     itemId: string,
-    data: { memo?: string | null; rating?: number | null; title?: string }
+    data: {
+      memo?: string | null;
+      rating?: number | null;
+      title?: string;
+      userPlaceUrl?: string | null;
+      placeId?: string | null;
+      placePhotoRef?: string | null;
+    }
   ) => {
     if (!pairId) return Promise.resolve();
     return updateItemDetail(pairId, itemId, data);

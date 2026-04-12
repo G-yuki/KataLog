@@ -122,30 +122,33 @@ export const MemoryPage = () => {
       <header style={{ flexShrink: 0, padding: "14px 20px 10px",
                        borderBottom: "1px solid rgba(0,0,0,0.07)",
                        position: "sticky", top: 0, zIndex: 20,
-                       background: "var(--color-bg)" }}>
-        <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 17, fontWeight: 500,
+                       background: "var(--color-bg)",
+                       display: "flex", alignItems: "center" }}>
+        <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 16, fontWeight: 600,
                      color: "var(--color-text-main)", letterSpacing: "0.01em" }}>
           MEMORY: 思い出
         </h1>
+        <img src="/logo.png" alt="KataLog" style={{ marginLeft: "auto", height: 18, objectFit: "contain" }} />
       </header>
 
-      {/* 期間フィルター */}
-      <div style={{ flexShrink: 0, padding: "10px 20px 8px", display: "flex", gap: 6,
-                    background: "var(--color-bg)", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
-        {PERIOD_FILTERS.map(({ id, label }) => (
-          <button key={id} onClick={() => setPeriodFilter(id)}
-                  style={{ flexShrink: 0, fontSize: 11, padding: "5px 13px",
-                           borderRadius: 20, whiteSpace: "nowrap",
-                           fontFamily: "var(--font-sans)", cursor: "pointer",
-                           border: periodFilter === id ? "none" : "1px solid rgba(0,0,0,0.12)",
-                           background: periodFilter === id ? "var(--color-text-main)" : "transparent",
-                           color: periodFilter === id ? "var(--color-bg)" : "#5C4A35" }}>
-            {label}
-          </button>
-        ))}
-      </div>
-
+      {/* 期間フィルターはスクロールエリア内でstickyにする */}
       <div style={{ flex: 1, overflowY: "auto", scrollbarWidth: "none", paddingBottom: 80 }}>
+
+        <div style={{ position: "sticky", top: 0, zIndex: 15, padding: "10px 20px 8px",
+                      display: "flex", gap: 6, background: "var(--color-bg)",
+                      borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
+          {PERIOD_FILTERS.map(({ id, label }) => (
+            <button key={id} onClick={() => setPeriodFilter(id)}
+                    style={{ flexShrink: 0, fontSize: 11, padding: "5px 13px",
+                             borderRadius: 20, whiteSpace: "nowrap",
+                             fontFamily: "var(--font-sans)", cursor: "pointer",
+                             border: periodFilter === id ? "none" : "1px solid rgba(0,0,0,0.12)",
+                             background: periodFilter === id ? "var(--color-text-main)" : "transparent",
+                             color: periodFilter === id ? "var(--color-bg)" : "#5C4A35" }}>
+              {label}
+            </button>
+          ))}
+        </div>
 
         {allDoneItems.length === 0 ? (
           /* ── 空の状態 ── */

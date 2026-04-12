@@ -119,10 +119,11 @@ export const SuggestPage = () => {
             </svg>
           </button>
         )}
-        <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 17, fontWeight: 500, color: "var(--color-text-main)",
+        <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 16, fontWeight: 600, color: "var(--color-text-main)",
                      letterSpacing: "0.01em" }}>
           {step === "update-hearing" ? "プランを更新" : "SUGGEST: おすすめ体験提案"}
         </h1>
+        <img src="/logo.png" alt="KataLog" style={{ marginLeft: "auto", height: 18, objectFit: "contain" }} />
       </header>
 
       <div style={{ flex: 1, overflowY: "auto", scrollbarWidth: "none", paddingBottom: 80 }}>
@@ -338,11 +339,11 @@ export const SuggestPage = () => {
         </div>
       )}
 
-      {/* 追加ボタン（results ステップのみ） */}
+      {/* 追加ボタン（results ステップのみ） BottomNavの上に配置 */}
       {step === "results" && (
-        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0,
-                      padding: "16px 20px 32px",
-                      background: "linear-gradient(to top, var(--color-bg) 70%, transparent)" }}>
+        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 40,
+                      padding: "16px 20px 80px",
+                      background: "linear-gradient(to top, var(--color-bg) 80%, transparent)" }}>
           <button onClick={handleAdd} disabled={selected.size === 0 || saving}
                   style={{ width: "100%", padding: "16px",
                            background: selected.size > 0 ? "var(--color-primary)" : "rgba(0,0,0,0.1)",

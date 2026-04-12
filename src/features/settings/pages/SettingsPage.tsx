@@ -111,11 +111,13 @@ export const SettingsPage = () => {
       <header style={{ flexShrink: 0, padding: "14px 20px 10px",
                        borderBottom: "1px solid rgba(0,0,0,0.07)",
                        position: "sticky", top: 0, zIndex: 20,
-                       background: "var(--color-bg)" }}>
-        <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 17, fontWeight: 500, color: "var(--color-text-main)",
+                       background: "var(--color-bg)",
+                       display: "flex", alignItems: "center" }}>
+        <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 17, fontWeight: 600, color: "var(--color-text-main)",
                      letterSpacing: "0.01em" }}>
           SETTING: 設定
         </h1>
+        <img src="/logo.png" alt="KataLog" style={{ marginLeft: "auto", height: 18, objectFit: "contain" }} />
       </header>
 
       {/* スクロールエリア */}
@@ -231,14 +233,18 @@ export const SettingsPage = () => {
 
         {/* 法的リンク */}
         <div style={{ marginTop: 40, display: "flex", justifyContent: "center", gap: 20 }}>
-          <a href="/terms" target="_blank"
-             style={{ fontSize: 11, color: "var(--color-text-soft)", textDecoration: "underline" }}>
+          <button onClick={() => navigate("/terms")}
+                  style={{ fontSize: 11, color: "var(--color-text-soft)", textDecoration: "underline",
+                           background: "none", border: "none", cursor: "pointer",
+                           fontFamily: "var(--font-sans)", padding: 0 }}>
             利用規約
-          </a>
-          <a href="/privacy" target="_blank"
-             style={{ fontSize: 11, color: "var(--color-text-soft)", textDecoration: "underline" }}>
+          </button>
+          <button onClick={() => navigate("/privacy")}
+                  style={{ fontSize: 11, color: "var(--color-text-soft)", textDecoration: "underline",
+                           background: "none", border: "none", cursor: "pointer",
+                           fontFamily: "var(--font-sans)", padding: 0 }}>
             プライバシーポリシー
-          </a>
+          </button>
         </div>
 
       </div>
@@ -251,7 +257,7 @@ export const SettingsPage = () => {
           <div onClick={(e) => e.stopPropagation()}
                style={{ width: "100%", background: "var(--color-bg)", borderRadius: "20px 20px 0 0",
                         padding: "28px 24px 40px", display: "flex", flexDirection: "column", gap: 16 }}>
-            <h2 style={{ fontFamily: "var(--font-serif)", fontSize: 17, fontWeight: 500,
+            <h2 style={{ fontFamily: "var(--font-sans)", fontSize: 17, fontWeight: 500,
                          color: "var(--color-text-main)", textAlign: "center" }}>
               パートナーを外しますか？
             </h2>
@@ -285,7 +291,7 @@ export const SettingsPage = () => {
           <div onClick={(e) => e.stopPropagation()}
                style={{ width: "100%", background: "var(--color-bg)", borderRadius: "20px 20px 0 0",
                         padding: "28px 24px 40px", display: "flex", flexDirection: "column", gap: 16 }}>
-            <h2 style={{ fontFamily: "var(--font-serif)", fontSize: 17, fontWeight: 500, color: "var(--color-text-main)",
+            <h2 style={{ fontFamily: "var(--font-sans)", fontSize: 17, fontWeight: 500, color: "var(--color-text-main)",
                          textAlign: "center" }}>
               リストをリセットしますか？
             </h2>

@@ -85,7 +85,7 @@ export const InquiryPage = () => {
             </svg>
           </button>
         )}
-        <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 17, fontWeight: 500, color: "var(--color-text-main)",
+        <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 17, fontWeight: 600, color: "var(--color-text-main)",
                      letterSpacing: "0.01em" }}>
           {step === "form" && "お問い合わせ"}
           {step === "confirm" && "送信確認"}

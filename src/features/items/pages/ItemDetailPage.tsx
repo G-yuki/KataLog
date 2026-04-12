@@ -17,8 +17,14 @@ const photoUrl = (photoRef: string) =>
   `https://places.googleapis.com/v1/${photoRef}/media?maxWidthPx=600&key=${MAPS_KEY}`;
 
 // /maps/search 形式はルート案内でなく場所検索として開く
-const mapsUrl = (title: string) =>
+const mapsSearchUrl = (title: string) =>
   `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(title)}`;
+
+// Google Maps の長いURL（/maps/place/NAME/...）から場所名を抽出
+const extractPlaceName = (url: string): string | null => {
+  const m = url.match(/\/maps\/place\/([^/@?]+)/);
+  return m ? decodeURIComponent(m[1].replace(/\+/g, " ")) : null;
+};
 
 export const ItemDetailPage = () => {
   const { itemId } = useParams<{ itemId: string }>();
@@ -34,6 +40,9 @@ export const ItemDetailPage = () => {
   const [memoChanged, setMemoChanged] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
+  const [editingUrl, setEditingUrl] = useState(false);
+  const [urlDraft, setUrlDraft] = useState("");
+  const [urlSaving, setUrlSaving] = useState(false);
   const enrichCalled = useRef(false);
 
   useEffect(() => {
@@ -77,6 +86,26 @@ export const ItemDetailPage = () => {
     if (!item) return;
     setTitleDraft(item.title);
     setEditingTitle(true);
+  };
+
+  const handleSaveUrl = async () => {
+    if (!item || !pairId) return;
+    const trimmed = urlDraft.trim();
+    setUrlSaving(true);
+    await saveDetail(item.itemId, { userPlaceUrl: trimmed || null });
+    // URL から場所名を抽出できたら enrichItem を呼ぶ
+    if (trimmed) {
+      const placeName = extractPlaceName(trimmed);
+      if (placeName) {
+        enrichCalled.current = true;
+        const fn = httpsCallable(functions, "enrichItem");
+        fn({ pairId, itemId: item.itemId, title: placeName }).catch(() => {
+          enrichCalled.current = false;
+        });
+      }
+    }
+    setUrlSaving(false);
+    setEditingUrl(false);
   };
 
   const handleTitleSave = async () => {
@@ -225,7 +254,6 @@ export const ItemDetailPage = () => {
         {/* カテゴリ・タグ */}
         <div className="flex gap-2 mb-5 flex-wrap items-center">
           <Tag label={item.category} />
-          <Tag label={item.difficulty === "easy" ? "気軽" : "特別"} />
           <Tag label={item.type === "outdoor" ? "屋外" : "屋内"} />
           {isEnriching && (
             <span style={{ fontSize: 11, color: "var(--color-text-soft)" }}>
@@ -242,30 +270,70 @@ export const ItemDetailPage = () => {
           )}
         </div>
 
-        {/* Google マップリンク */}
+        {/* Google マップ */}
         {isPlaceCategory && (
-          <a
-            href={mapsUrl(item.title)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="card p-4 mb-4"
-            style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 12 }}
-          >
-            <span style={{ fontSize: 20, flexShrink: 0 }}>🗺️</span>
-            <span style={{ flex: 1, fontSize: 14, fontWeight: 600,
-                           color: "var(--color-primary)" }}>
-              Google マップで見る
-            </span>
-            {item.placeRating != null && !hasPhoto && (
-              <span style={{ fontSize: 13, color: "var(--color-text-mid)", fontWeight: 600 }}>
-                ★ {item.placeRating.toFixed(1)}
+          <div className="card p-4 mb-4">
+            {/* マップで見るリンク */}
+            <a
+              href={item.userPlaceUrl ?? mapsSearchUrl(item.title)}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 12,
+                       marginBottom: 12 }}
+            >
+              <span style={{ fontSize: 20, flexShrink: 0 }}>🗺️</span>
+              <span style={{ flex: 1, fontSize: 14, fontWeight: 600,
+                             color: "var(--color-primary)" }}>
+                Google マップで見る
               </span>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0 }}>
+                <path d="M3 11L11 3M11 3H6M11 3V8" stroke="var(--color-primary)"
+                      strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </a>
+            {/* 場所URLの入力 */}
+            {editingUrl ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <p style={{ fontSize: 11, color: "var(--color-text-soft)" }}>
+                  Google マップの「共有」→「リンクをコピー」で取得した長いURLを貼り付けてください
+                </p>
+                <input
+                  autoFocus
+                  value={urlDraft}
+                  onChange={(e) => setUrlDraft(e.target.value)}
+                  placeholder="https://www.google.com/maps/place/..."
+                  style={{ fontSize: 12, color: "var(--color-text-main)", width: "100%",
+                           border: "1px solid rgba(0,0,0,0.15)", borderRadius: 8,
+                           padding: "8px 10px", background: "var(--color-bg)",
+                           outline: "none", fontFamily: "var(--font-sans)" }}
+                />
+                <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                  <button onClick={() => setEditingUrl(false)}
+                          style={{ fontSize: 12, color: "var(--color-text-soft)", background: "none",
+                                   border: "none", cursor: "pointer" }}>
+                    キャンセル
+                  </button>
+                  <button onClick={handleSaveUrl} disabled={urlSaving}
+                          style={{ fontSize: 12, fontWeight: 600, color: "var(--color-primary)",
+                                   background: "none", border: "none", cursor: "pointer" }}>
+                    {urlSaving ? "保存中..." : "保存"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => { setUrlDraft(item.userPlaceUrl ?? ""); setEditingUrl(true); }}
+                style={{ fontSize: 12, color: item.userPlaceUrl ? "var(--color-primary)" : "var(--color-text-soft)",
+                         background: "none", border: "none", cursor: "pointer", padding: 0,
+                         display: "flex", alignItems: "center", gap: 4 }}>
+                <svg width="12" height="12" viewBox="0 0 13 13" fill="none">
+                  <path d="M8.5 1.5l3 3L4 12H1v-3L8.5 1.5z" stroke="currentColor"
+                        strokeWidth="1.3" strokeLinejoin="round"/>
+                </svg>
+                {item.userPlaceUrl ? "場所URLを変更" : "場所URLを登録"}
+              </button>
             )}
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0 }}>
-              <path d="M3 11L11 3M11 3H6M11 3V8" stroke="var(--color-primary)"
-                    strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </a>
+          </div>
         )}
 
         {/* 完了チェック */}
