@@ -25,6 +25,28 @@ const TRANSPORT_LABELS = toMap(TRANSPORT_OPTIONS);
 const BUDGET_LABELS    = toMap(BUDGET_OPTIONS);
 const INDOOR_LABELS    = toMap(INDOOR_OPTIONS);
 
+const OVERSEAS_REGIONS = [
+  "東南アジア",
+  "東アジア",
+  "ヨーロッパ",
+  "ハワイ・グアム",
+  "アメリカ・カナダ",
+  "オセアニア",
+  "中東・アフリカ",
+] as const;
+
+const OVERSEAS_COUNTRIES: Record<string, string[]> = {
+  "東南アジア":    ["タイ", "ベトナム", "バリ島", "シンガポール", "マレーシア", "フィリピン"],
+  "東アジア":      ["韓国", "台湾", "中国", "香港"],
+  "ヨーロッパ":    ["フランス", "イタリア", "スペイン", "イギリス", "ドイツ", "ポルトガル"],
+  "ハワイ・グアム": ["ハワイ", "グアム", "サイパン"],
+  "アメリカ・カナダ": ["アメリカ", "カナダ"],
+  "オセアニア":    ["オーストラリア", "ニュージーランド"],
+  "中東・アフリカ": ["UAE（ドバイ）", "エジプト", "南アフリカ"],
+};
+
+const SESSION_KEY = (pairId: string) => `suggest_cache_${pairId}`;
+
 export const SuggestPage = () => {
   const navigate = useNavigate();
   const { generate, loading: generating } = useGenerateItems();
@@ -49,6 +71,18 @@ export const SuggestPage = () => {
         const h = snap.data().hearing as Hearing | undefined;
         if (h) setHearing(h);
       }
+      // sessionStorage からキャッシュを復元
+      try {
+        const cached = sessionStorage.getItem(SESSION_KEY(pairId));
+        if (cached) {
+          const { suggestions: cachedSuggestions } = JSON.parse(cached) as { suggestions: ItemDraft[] };
+          if (cachedSuggestions?.length > 0) {
+            setSuggestions(cachedSuggestions);
+          }
+        }
+      } catch {
+        // キャッシュ読み込み失敗は無視
+      }
       setInitLoading(false);
     })();
   }, [pairId, pairLoading, navigate]);
@@ -62,6 +96,14 @@ export const SuggestPage = () => {
     if (items) {
       setSuggestions(items);
       setSelected(new Set());
+      // sessionStorage にキャッシュ保存
+      if (pairId) {
+        try {
+          sessionStorage.setItem(SESSION_KEY(pairId), JSON.stringify({ suggestions: items }));
+        } catch {
+          // sessionStorage が使えない環境では無視
+        }
+      }
       setStep("results");
     } else {
       setGenError("提案の生成に失敗しました。もう一度お試しください。");
@@ -92,6 +134,10 @@ export const SuggestPage = () => {
     setSaving(true);
     const drafts = [...selected].map((i) => suggestions[i]);
     await addSuggestedItems(pairId, drafts);
+    // キャッシュをクリア（追加済みのため）
+    if (pairId) {
+      try { sessionStorage.removeItem(SESSION_KEY(pairId)); } catch { /* ignore */ }
+    }
     setSaving(false);
     setStep("done");
   };
@@ -156,8 +202,13 @@ export const SuggestPage = () => {
                       <Chip key={g}>{genre.emoji} {genre.label}</Chip>
                     ) : null;
                   })}
-                  {hearing.prefecture && <Chip>{hearing.prefecture}</Chip>}
-                  {hearing.range && <Chip>{RANGE_LABELS[hearing.range]}</Chip>}
+                  {hearing.overseas
+                    ? <Chip>✈️ {hearing.overseas}</Chip>
+                    : <>
+                        {hearing.prefecture && <Chip>{hearing.prefecture}</Chip>}
+                        {hearing.range && <Chip>{RANGE_LABELS[hearing.range]}</Chip>}
+                      </>
+                  }
                   {hearing.indoor && <Chip>{INDOOR_LABELS[hearing.indoor]}</Chip>}
                   {hearing.budget && <Chip>{BUDGET_LABELS[hearing.budget]}</Chip>}
                   {hearing.children && <Chip>{CHILDREN_LABELS[hearing.children]}</Chip>}
@@ -192,6 +243,16 @@ export const SuggestPage = () => {
                          opacity: hearing ? 1 : 0.4, fontFamily: "var(--font-sans)" }}>
                 ✦ AIに提案してもらう
               </button>
+              {suggestions.length > 0 && (
+                <button
+                  onClick={() => setStep("results")}
+                  style={{ width: "100%", padding: "16px", background: "#fff",
+                           color: "var(--color-primary)", border: "1px solid var(--color-primary)",
+                           borderRadius: 14, fontSize: 14, cursor: "pointer",
+                           fontFamily: "var(--font-sans)" }}>
+                  前回の提案を見る（{suggestions.length}件）
+                </button>
+              )}
               <button
                 onClick={() => { setEditHearing({ ...hearing }); setStep("update-hearing"); }}
                 style={{ width: "100%", padding: "16px", background: "#fff",
@@ -382,17 +443,73 @@ const UpdateHearingForm = ({
   onSubmit: () => void;
   submitting: boolean;
 }) => {
-  const set = (key: keyof Hearing, value: string | string[]) =>
+  const set = (key: keyof Hearing, value: string | string[] | undefined) =>
     onChange({ ...hearing, [key]: value });
   const toggleGenre = (id: string) => {
     const genres = hearing.genres ?? [];
     set("genres", genres.includes(id) ? genres.filter((g) => g !== id) : [...genres, id]);
   };
 
+  const isOverseas = !!hearing.overseas;
+
+  // 海外エリアの3段階ローカル状態
+  const initRegion = (): string => {
+    const o = hearing.overseas;
+    if (!o) return OVERSEAS_REGIONS[0];
+    if ((OVERSEAS_REGIONS as readonly string[]).includes(o)) return o;
+    for (const [r, cs] of Object.entries(OVERSEAS_COUNTRIES)) {
+      if (cs.includes(o)) return r;
+    }
+    return OVERSEAS_REGIONS[0];
+  };
+  const initCountry = (): string => {
+    const o = hearing.overseas;
+    if (!o || (OVERSEAS_REGIONS as readonly string[]).includes(o)) return "";
+    for (const cs of Object.values(OVERSEAS_COUNTRIES)) {
+      if (cs.includes(o)) return o;
+    }
+    return "その他";
+  };
+  const initOther = (): string => {
+    const o = hearing.overseas;
+    if (!o || (OVERSEAS_REGIONS as readonly string[]).includes(o)) return "";
+    for (const cs of Object.values(OVERSEAS_COUNTRIES)) {
+      if (cs.includes(o)) return "";
+    }
+    return o;
+  };
+
+  const [overseasRegion, setOverseasRegion] = useState(initRegion);
+  const [overseasCountry, setOverseasCountry] = useState(initCountry);
+  const [otherText, setOtherText] = useState(initOther);
+
+  const handleRegionSelect = (r: string) => {
+    setOverseasRegion(r);
+    setOverseasCountry("");
+    setOtherText("");
+    set("overseas", r);
+  };
+
+  const handleCountrySelect = (country: string) => {
+    setOverseasCountry(country);
+    if (country === "その他") {
+      setOtherText("");
+      set("overseas", overseasRegion);
+    } else {
+      // 未選択（""）のときも地域名を維持して海外モードを保つ
+      set("overseas", country || overseasRegion);
+    }
+  };
+
+  const handleOtherTextChange = (text: string) => {
+    setOtherText(text);
+    set("overseas", text || overseasRegion);
+  };
+
   const canSubmit = (hearing.genres?.length ?? 0) > 0
-    && !!hearing.prefecture && !!hearing.range
     && !!hearing.children && !!hearing.transport
-    && !!hearing.budget && !!hearing.indoor;
+    && !!hearing.budget && !!hearing.indoor
+    && (isOverseas || (!!hearing.prefecture && !!hearing.range));
 
   return (
     <div style={{ padding: "24px 20px 40px", display: "flex", flexDirection: "column", gap: 24 }}>
@@ -419,21 +536,74 @@ const UpdateHearingForm = ({
 
       {/* エリア */}
       <FormSection label="活動エリア">
-        <select value={hearing.prefecture ?? ""} onChange={(e) => set("prefecture", e.target.value)}
+        {/* 国内 / 海外 トグル */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
+          <ToggleChip selected={!isOverseas} onClick={() => set("overseas", undefined)}>
+            🏠 国内
+          </ToggleChip>
+          <ToggleChip selected={isOverseas} onClick={() => {
+            if (!isOverseas) set("overseas", OVERSEAS_REGIONS[0]);
+          }}>
+            ✈️ 海外
+          </ToggleChip>
+        </div>
+
+        {!isOverseas ? (
+          <>
+            <select value={hearing.prefecture ?? ""} onChange={(e) => set("prefecture", e.target.value)}
+                    style={{ width: "100%", padding: "10px 12px", fontSize: 13,
+                             border: "1.5px solid var(--color-border)", borderRadius: 10,
+                             background: "#fff", color: "var(--color-text-main)",
+                             fontFamily: "var(--font-sans)", marginBottom: 8 }}>
+              <option value="">都道府県を選択</option>
+              {PREFECTURES.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+            <div style={{ display: "flex", gap: 8 }}>
+              {RANGE_OPTIONS.map((r) => (
+                <ToggleChip key={r.id} selected={hearing.range === r.id} onClick={() => set("range", r.id)}>
+                  {r.label}
+                </ToggleChip>
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
+            {/* エリアチップ（7地域） */}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {OVERSEAS_REGIONS.map((r) => (
+                <ToggleChip key={r} selected={overseasRegion === r} onClick={() => handleRegionSelect(r)}>
+                  {r}
+                </ToggleChip>
+              ))}
+            </div>
+            {/* 国名プルダウン */}
+            <select
+              value={overseasCountry}
+              onChange={(e) => handleCountrySelect(e.target.value)}
+              style={{ width: "100%", padding: "10px 12px", fontSize: 13,
+                       border: "1.5px solid var(--color-border)", borderRadius: 10,
+                       background: "#fff", color: overseasCountry ? "var(--color-text-main)" : "var(--color-text-soft)",
+                       fontFamily: "var(--font-sans)" }}>
+              <option value="">国を選択（任意）</option>
+              {(OVERSEAS_COUNTRIES[overseasRegion] ?? []).map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+              <option value="その他">その他</option>
+            </select>
+            {/* その他 → テキスト入力 */}
+            {overseasCountry === "その他" && (
+              <input
+                value={otherText}
+                onChange={(e) => handleOtherTextChange(e.target.value)}
+                placeholder="国名を入力"
+                maxLength={40}
                 style={{ width: "100%", padding: "10px 12px", fontSize: 13,
                          border: "1.5px solid var(--color-border)", borderRadius: 10,
                          background: "#fff", color: "var(--color-text-main)",
-                         fontFamily: "var(--font-sans)", marginBottom: 8 }}>
-          <option value="">都道府県を選択</option>
-          {PREFECTURES.map((p) => <option key={p} value={p}>{p}</option>)}
-        </select>
-        <div style={{ display: "flex", gap: 8 }}>
-          {RANGE_OPTIONS.map((r) => (
-            <ToggleChip key={r.id} selected={hearing.range === r.id} onClick={() => set("range", r.id)}>
-              {r.label}
-            </ToggleChip>
-          ))}
-        </div>
+                         fontFamily: "var(--font-sans)", boxSizing: "border-box" }} />
+            )}
+          </>
+        )}
       </FormSection>
 
       {/* 屋内外・予算・子ども・移動手段 */}

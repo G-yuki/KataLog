@@ -7,6 +7,7 @@ import {
   updateItemDetail,
   deleteItem,
 } from "../services/itemService";
+import { Timestamp } from "firebase/firestore";
 import type { Item, ItemStatus } from "../../../types";
 
 export const useItems = (pairId: string | null) => {
@@ -52,6 +53,7 @@ export const useItems = (pairId: string | null) => {
       userPlaceUrl?: string | null;
       placeId?: string | null;
       placePhotoRef?: string | null;
+      completedAt?: Timestamp | null;
     }
   ) => {
     if (!pairId) return Promise.resolve();

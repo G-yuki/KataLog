@@ -19,6 +19,7 @@ export interface Hearing {
   budget: string;          // "3000" | "5000" | "10000" | "30000" | "any"
   indoor: string;          // "outdoor" | "indoor" | "both"
   freetext: string;
+  overseas?: string;       // 海外旅行エリア（Asia/Europe 等）- SUGGEST海外オプション用
 }
 
 export interface Pair {
@@ -60,6 +61,7 @@ export interface Item {
   memo: string | null;       // 100文字以内
   completedAt: Timestamp | null;
   createdAt: Timestamp;
+  expireAt?: Timestamp;        // matchTier="try" のみ: +30日後（Firestore TTL自動削除）
   placeId: string | null;
   placeName: string | null;
   placeRating: number | null;

@@ -13,18 +13,16 @@ import type { Item } from "../../../types";
 const MAPS_KEY = import.meta.env.VITE_MAPS_BROWSER_KEY as string;
 const PLACE_CATEGORIES = ["おでかけ", "食事", "スポーツ", "映画", "音楽"] as const;
 
+// Storage URL はそのまま、旧形式（Places photo参照名）は API 経由で取得
 const photoUrl = (photoRef: string) =>
-  `https://places.googleapis.com/v1/${photoRef}/media?maxWidthPx=600&key=${MAPS_KEY}`;
+  photoRef.startsWith("https://")
+    ? photoRef
+    : `https://places.googleapis.com/v1/${photoRef}/media?maxWidthPx=600&key=${MAPS_KEY}`;
 
 // /maps/search 形式はルート案内でなく場所検索として開く
 const mapsSearchUrl = (title: string) =>
   `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(title)}`;
 
-// Google Maps の長いURL（/maps/place/NAME/...）から場所名を抽出
-const extractPlaceName = (url: string): string | null => {
-  const m = url.match(/\/maps\/place\/([^/@?]+)/);
-  return m ? decodeURIComponent(m[1].replace(/\+/g, " ")) : null;
-};
 
 export const ItemDetailPage = () => {
   const { itemId } = useParams<{ itemId: string }>();
@@ -43,6 +41,8 @@ export const ItemDetailPage = () => {
   const [editingUrl, setEditingUrl] = useState(false);
   const [urlDraft, setUrlDraft] = useState("");
   const [urlSaving, setUrlSaving] = useState(false);
+  const [editingCompletedAt, setEditingCompletedAt] = useState(false);
+  const [completedAtDraft, setCompletedAtDraft] = useState("");
   const enrichCalled = useRef(false);
 
   useEffect(() => {
@@ -93,16 +93,13 @@ export const ItemDetailPage = () => {
     const trimmed = urlDraft.trim();
     setUrlSaving(true);
     await saveDetail(item.itemId, { userPlaceUrl: trimmed || null });
-    // URL から場所名を抽出できたら enrichItem を呼ぶ
+    // URL（短縮含む）はサーバー側でリダイレクト解決して場所名を取得
     if (trimmed) {
-      const placeName = extractPlaceName(trimmed);
-      if (placeName) {
-        enrichCalled.current = true;
-        const fn = httpsCallable(functions, "enrichItem");
-        fn({ pairId, itemId: item.itemId, title: placeName }).catch(() => {
-          enrichCalled.current = false;
-        });
-      }
+      enrichCalled.current = true;
+      const fn = httpsCallable(functions, "enrichItem");
+      fn({ pairId, itemId: item.itemId, title: item.title, userPlaceUrl: trimmed }).catch(() => {
+        enrichCalled.current = false;
+      });
     }
     setUrlSaving(false);
     setEditingUrl(false);
@@ -135,6 +132,16 @@ export const ItemDetailPage = () => {
     const newRating = rating === star ? null : star;
     setRating(newRating);
     await saveDetail(item.itemId, { rating: newRating });
+  };
+
+  const handleSaveCompletedAt = async () => {
+    if (!item) return;
+    const [y, m, d] = completedAtDraft.split("-").map(Number);
+    if (!y || !m || !d) return;
+    const date = new Date(y, m - 1, d, 12, 0, 0); // 正午固定（タイムゾーンずれ回避）
+    const { Timestamp } = await import("firebase/firestore");
+    await saveDetail(item.itemId, { completedAt: Timestamp.fromDate(date) });
+    setEditingCompletedAt(false);
   };
 
   const handleDelete = async () => {
@@ -270,10 +277,10 @@ export const ItemDetailPage = () => {
           )}
         </div>
 
-        {/* Google マップ */}
-        {isPlaceCategory && (
-          <div className="card p-4 mb-4">
-            {/* マップで見るリンク */}
+        {/* Google マップ（全カテゴリ対象） */}
+        <div className="card p-4 mb-4">
+          {/* マップで見るリンク: Maps対象カテゴリ or URL登録済みの場合に表示 */}
+          {(isPlaceCategory || item.userPlaceUrl) && (
             <a
               href={item.userPlaceUrl ?? mapsSearchUrl(item.title)}
               target="_blank"
@@ -291,50 +298,50 @@ export const ItemDetailPage = () => {
                       strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </a>
-            {/* 場所URLの入力 */}
-            {editingUrl ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <p style={{ fontSize: 11, color: "var(--color-text-soft)" }}>
-                  Google マップの「共有」→「リンクをコピー」で取得した長いURLを貼り付けてください
-                </p>
-                <input
-                  autoFocus
-                  value={urlDraft}
-                  onChange={(e) => setUrlDraft(e.target.value)}
-                  placeholder="https://www.google.com/maps/place/..."
-                  style={{ fontSize: 12, color: "var(--color-text-main)", width: "100%",
-                           border: "1px solid rgba(0,0,0,0.15)", borderRadius: 8,
-                           padding: "8px 10px", background: "var(--color-bg)",
-                           outline: "none", fontFamily: "var(--font-sans)" }}
-                />
-                <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                  <button onClick={() => setEditingUrl(false)}
-                          style={{ fontSize: 12, color: "var(--color-text-soft)", background: "none",
-                                   border: "none", cursor: "pointer" }}>
-                    キャンセル
-                  </button>
-                  <button onClick={handleSaveUrl} disabled={urlSaving}
-                          style={{ fontSize: 12, fontWeight: 600, color: "var(--color-primary)",
-                                   background: "none", border: "none", cursor: "pointer" }}>
-                    {urlSaving ? "保存中..." : "保存"}
-                  </button>
-                </div>
+          )}
+          {/* 場所URLの入力（全カテゴリ） */}
+          {editingUrl ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <p style={{ fontSize: 11, color: "var(--color-text-soft)" }}>
+                Google マップの「共有」→「リンクをコピー」で取得したURLを貼り付けてください。
+              </p>
+              <input
+                autoFocus
+                value={urlDraft}
+                onChange={(e) => setUrlDraft(e.target.value)}
+                placeholder="https://www.google.com/maps/place/..."
+                style={{ fontSize: 12, color: "var(--color-text-main)", width: "100%",
+                         border: "1px solid rgba(0,0,0,0.15)", borderRadius: 8,
+                         padding: "8px 10px", background: "var(--color-bg)",
+                         outline: "none", fontFamily: "var(--font-sans)" }}
+              />
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                <button onClick={() => setEditingUrl(false)}
+                        style={{ fontSize: 12, color: "var(--color-text-soft)", background: "none",
+                                 border: "none", cursor: "pointer" }}>
+                  キャンセル
+                </button>
+                <button onClick={handleSaveUrl} disabled={urlSaving}
+                        style={{ fontSize: 12, fontWeight: 600, color: "var(--color-primary)",
+                                 background: "none", border: "none", cursor: "pointer" }}>
+                  {urlSaving ? "保存中..." : "保存"}
+                </button>
               </div>
-            ) : (
-              <button
-                onClick={() => { setUrlDraft(item.userPlaceUrl ?? ""); setEditingUrl(true); }}
-                style={{ fontSize: 12, color: item.userPlaceUrl ? "var(--color-primary)" : "var(--color-text-soft)",
-                         background: "none", border: "none", cursor: "pointer", padding: 0,
-                         display: "flex", alignItems: "center", gap: 4 }}>
-                <svg width="12" height="12" viewBox="0 0 13 13" fill="none">
-                  <path d="M8.5 1.5l3 3L4 12H1v-3L8.5 1.5z" stroke="currentColor"
-                        strokeWidth="1.3" strokeLinejoin="round"/>
-                </svg>
-                {item.userPlaceUrl ? "場所URLを変更" : "場所URLを登録"}
-              </button>
-            )}
-          </div>
-        )}
+            </div>
+          ) : (
+            <button
+              onClick={() => { setUrlDraft(item.userPlaceUrl ?? ""); setEditingUrl(true); }}
+              style={{ fontSize: 12, color: item.userPlaceUrl ? "var(--color-primary)" : "var(--color-text-soft)",
+                       background: "none", border: "none", cursor: "pointer", padding: 0,
+                       display: "flex", alignItems: "center", gap: 4 }}>
+              <svg width="12" height="12" viewBox="0 0 13 13" fill="none">
+                <path d="M8.5 1.5l3 3L4 12H1v-3L8.5 1.5z" stroke="currentColor"
+                      strokeWidth="1.3" strokeLinejoin="round"/>
+              </svg>
+              {item.userPlaceUrl ? "場所URLを変更" : "場所URLを登録"}
+            </button>
+          )}
+        </div>
 
         {/* 完了チェック */}
         <div className="card p-4 mb-4">
@@ -343,10 +350,48 @@ export const ItemDetailPage = () => {
               <p className="text-sm font-bold" style={{ color: "var(--color-text-main)" }}>
                 {isDone ? "✅ 完了！" : "⏳ 未完了"}
               </p>
-              {isDone && item.completedAt && (
-                <p className="text-xs mt-0.5" style={{ color: "var(--color-text-soft)" }}>
-                  {(item.completedAt as { toDate: () => Date }).toDate().toLocaleDateString("ja-JP")}
-                </p>
+              {isDone && item.completedAt && !editingCompletedAt && (
+                <button
+                  onClick={() => {
+                    const d = (item.completedAt as { toDate: () => Date }).toDate();
+                    const yyyy = d.getFullYear();
+                    const mm = String(d.getMonth() + 1).padStart(2, "0");
+                    const dd = String(d.getDate()).padStart(2, "0");
+                    setCompletedAtDraft(`${yyyy}-${mm}-${dd}`);
+                    setEditingCompletedAt(true);
+                  }}
+                  style={{ background: "none", border: "none", padding: 0, cursor: "pointer",
+                           display: "flex", alignItems: "center", gap: 4, marginTop: 2 }}>
+                  <span className="text-xs" style={{ color: "var(--color-text-soft)" }}>
+                    {(item.completedAt as { toDate: () => Date }).toDate().toLocaleDateString("ja-JP")}
+                  </span>
+                  <svg width="10" height="10" viewBox="0 0 13 13" fill="none">
+                    <path d="M8.5 1.5l3 3L4 12H1v-3L8.5 1.5z" stroke="var(--color-text-soft)"
+                          strokeWidth="1.3" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+              )}
+              {isDone && editingCompletedAt && (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+                  <input
+                    type="date"
+                    value={completedAtDraft}
+                    onChange={(e) => setCompletedAtDraft(e.target.value)}
+                    style={{ fontSize: 12, border: "1px solid var(--color-border)", borderRadius: 6,
+                             padding: "3px 6px", background: "var(--color-bg)",
+                             color: "var(--color-text-main)", fontFamily: "var(--font-sans)" }}
+                  />
+                  <button onClick={handleSaveCompletedAt}
+                          style={{ fontSize: 11, fontWeight: 600, color: "var(--color-primary)",
+                                   background: "none", border: "none", cursor: "pointer" }}>
+                    保存
+                  </button>
+                  <button onClick={() => setEditingCompletedAt(false)}
+                          style={{ fontSize: 11, color: "var(--color-text-soft)",
+                                   background: "none", border: "none", cursor: "pointer" }}>
+                    ✕
+                  </button>
+                </div>
               )}
             </div>
             <button

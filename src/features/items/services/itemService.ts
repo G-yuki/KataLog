@@ -13,6 +13,7 @@ import {
   writeBatch,
   getDocs,
   runTransaction,
+  Timestamp,
 } from "firebase/firestore";
 import { db } from "../../../firebase/firestore";
 import type { Item, ItemDraft, ItemStatus, PendingItem, SwipeAction } from "../../../types";
@@ -71,6 +72,7 @@ export const updateItemDetail = async (
     userPlaceUrl?: string | null;
     placeId?: string | null;
     placePhotoRef?: string | null;
+    completedAt?: Timestamp | null;
   }
 ): Promise<void> => {
   await updateDoc(doc(db, "pairs", pairId, "items", itemId), data);
@@ -296,6 +298,10 @@ export const finalizePairMatching = async (pairId: string): Promise<void> => {
       rating:         null,
       memo:           null,
       completedAt:    null,
+      // try アイテムは30日後に Firestore TTL で自動削除
+      ...(matchTier === "try" && {
+        expireAt: Timestamp.fromDate(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)),
+      }),
       placeId:        null,
       placeName:      null,
       placeRating:    null,

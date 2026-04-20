@@ -1,5 +1,6 @@
 import { setGlobalOptions } from "firebase-functions";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { onDocumentDeleted } from "firebase-functions/v2/firestore";
 import { defineSecret } from "firebase-functions/params";
 import { GoogleGenerativeAI, SchemaType, type Schema } from "@google/generative-ai";
 import * as admin from "firebase-admin";
@@ -74,16 +75,23 @@ export const generateItems = onCall(
     .map((g) => genreLabels[g] ?? g)
     .join("、");
 
+  // 海外オプションがある場合はエリア指定を上書き
+  const overseasNote = hearing.overseas
+    ? `\n- 旅行先：${hearing.overseas}（海外旅行プラン）`
+    : "";
+  const areaNote = hearing.overseas
+    ? ""
+    : `- 活動エリア：${hearing.prefecture}（${rangeLabel[hearing.range] ?? hearing.range}）\n`;
+
   const prompt = `あなたはカップル・夫婦向けの体験提案AIです。
 以下のヒアリング結果をもとに、このカップルにぴったりな「やりたいこと」リストを50件生成してください。
 
 【ヒアリング結果】
 - 好きな体験タイプ：${genres}
-- 活動エリア：${hearing.prefecture}（${rangeLabel[hearing.range] ?? hearing.range}）
-- 子ども：${childrenLabel[hearing.children] ?? hearing.children}
+${areaNote}- 子ども：${childrenLabel[hearing.children] ?? hearing.children}
 - 移動手段：${transportLabel[hearing.transport] ?? hearing.transport}
 - 予算（1回あたり・ふたり合計）：${budgetLabel[hearing.budget] ?? hearing.budget}
-- 屋内/屋外：${indoorLabel[hearing.indoor] ?? hearing.indoor}
+- 屋内/屋外：${indoorLabel[hearing.indoor] ?? hearing.indoor}${overseasNote}
 ${hearing.freetext ? `- 自由入力（最優先で反映すること）：${hearing.freetext}` : ""}
 
 【カテゴリ定義】（必ずいずれか1つを選ぶこと）
@@ -97,7 +105,8 @@ ${hearing.freetext ? `- 自由入力（最優先で反映すること）：${hea
 - その他：上記のどれにも明確に当てはまらない体験のみ（極力使わないこと）
 
 【ルール】
-- title は15文字以内
+- title はGoogleマップで検索しやすい具体的な店名・スポット名・施設名・体験名で15文字以内（例：「箱根登山鉄道で紅葉狩り」「新宿御苑でお花見」「浅草の老舗天ぷらでランチ」）
+- 固有名詞を含む具体的なタイトルを優先すること（「カフェに行く」より「猿田彦珈琲でモーニング」）
 - category は上記8種類のいずれか。「その他」は上記7カテゴリのどれにも当てはまらない場合のみ使うこと
 - 50件のうち「その他」は最大3件まで。違反した場合は超過分を適切なカテゴリに変更してから出力すること
 - 件数が50件に満たない場合は追加して必ず50件にすること
@@ -165,10 +174,8 @@ export const generateMemory = onCall(
       throw new HttpsError("invalid-argument", "完了済みアイテムが必要です。");
     }
 
-    // 完了済み：古い順（時系列）に並べる
-    const chronological = [...items].reverse();
-
-    const itemList = chronological
+    // 完了済み：古い順（時系列）で渡ってくる前提（呼び出し側でソート済み）
+    const itemList = items
       .map((item, i) => {
         const rating = item.rating != null ? `★${item.rating}` : "評価なし";
         const month = item.completedMonth ? `${item.completedMonth}` : "";
@@ -198,7 +205,7 @@ ${todoList}
 
 ■ この期間のハイライト
 最も評価が高かった体験を2〜3つ、以下の形式で：
-1.【体験名】（[カテゴリ]/[月]）★[評価] 
+1.【体験名】（[カテゴリ]/[月]）★[評価]
 　"[メモをもとにした一言エピソード]"
 
 ■ ふたりの${periodLabel}の流れ
@@ -235,9 +242,145 @@ ${todoList}
   }
 );
 
-// ── ペア全件バックグラウンドエンリッチ ────────────────────────────────
+// ── Storage に写真をキャッシュするヘルパー ────────────────────
 const PLACE_CATEGORIES = ["おでかけ", "食事", "スポーツ", "映画", "音楽"];
 
+const cachePhotoToStorage = async (
+  photoName: string,
+  storagePath: string,
+  apiKey: string
+): Promise<string | null> => {
+  try {
+    // Places API からメディアURIを取得（skipHttpRedirect=true でJSON応答）
+    const mediaRes = await fetch(
+      `https://places.googleapis.com/v1/${photoName}/media?maxWidthPx=800&skipHttpRedirect=true`,
+      { headers: { "X-Goog-Api-Key": apiKey } }
+    );
+    if (!mediaRes.ok) return null;
+    const mediaData = await mediaRes.json() as { photoUri?: string };
+    if (!mediaData.photoUri) return null;
+
+    // 実際の画像をフェッチ
+    const imgRes = await fetch(mediaData.photoUri);
+    if (!imgRes.ok) return null;
+    const imgBuffer = await imgRes.arrayBuffer();
+
+    // Firebase Storage にアップロード
+    const bucket = admin.storage().bucket();
+    const file = bucket.file(storagePath);
+    await file.save(Buffer.from(imgBuffer), {
+      contentType: "image/jpeg",
+      metadata: { cacheControl: "public, max-age=31536000" },
+    });
+    await file.makePublic();
+
+    return `https://storage.googleapis.com/${bucket.name}/${storagePath}`;
+  } catch (e) {
+    console.error("cachePhotoToStorage failed:", storagePath, e);
+    return null;
+  }
+};
+
+// ── URL リダイレクト解決 + 場所名抽出 ────────────────────────
+const resolvePlaceNameFromUrl = async (url: string): Promise<string | null> => {
+  try {
+    const res = await fetch(url, { method: "HEAD", redirect: "follow" });
+    const finalUrl = res.url;
+    const m = finalUrl.match(/\/maps\/place\/([^/@?]+)/);
+    if (!m) return null;
+    return decodeURIComponent(m[1].replace(/\+/g, " "));
+  } catch {
+    return null;
+  }
+};
+
+// ── Places エンリッチ（アイテムにGoogle Places情報を付与） ────────────
+export const enrichItem = onCall(
+  { invoker: "public", secrets: [mapsServerKey], enforceAppCheck: false },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "ログインが必要です。");
+    }
+
+    const { pairId, itemId, title, prefecture, userPlaceUrl } = request.data as {
+      pairId: string;
+      itemId: string;
+      title: string;
+      prefecture?: string;
+      userPlaceUrl?: string;
+    };
+
+    if (!pairId || !itemId || !title) {
+      throw new HttpsError("invalid-argument", "パラメータが不足しています。");
+    }
+
+    // userPlaceUrl が渡された場合はリダイレクト解決して場所名を取得
+    let resolvedTitle = title;
+    if (userPlaceUrl) {
+      const placeName = await resolvePlaceNameFromUrl(userPlaceUrl);
+      if (placeName) resolvedTitle = placeName;
+    }
+
+    const textQuery = (userPlaceUrl && resolvedTitle !== title)
+      ? resolvedTitle
+      : (prefecture ? `${resolvedTitle} ${prefecture}` : resolvedTitle);
+
+    try {
+      const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Goog-Api-Key": mapsServerKey.value(),
+          "X-Goog-FieldMask": "places.id,places.photos",
+        },
+        body: JSON.stringify({
+          textQuery,
+          languageCode: "ja",
+          minRating: 3.5,
+          pageSize: 5,
+        }),
+      });
+
+      const data = await res.json() as {
+        places?: Array<{
+          id: string;
+          photos?: Array<{ name: string }>;
+        }>;
+      };
+
+      const candidates = (data.places ?? []).filter((p) => p.photos && p.photos.length > 0);
+      const place = candidates[0] ?? null;
+
+      // 写真を Storage にキャッシュ
+      let storageUrl: string | null = null;
+      if (place?.photos?.[0]?.name) {
+        const storagePath = `pairs/${pairId}/items/${itemId}.jpg`;
+        storageUrl = await cachePhotoToStorage(
+          place.photos[0].name,
+          storagePath,
+          mapsServerKey.value()
+        );
+      }
+
+      // placeId を "" にすることで「検索済みだが未発見」を表し、再呼び出しを防ぐ
+      await admin.firestore()
+        .doc(`pairs/${pairId}/items/${itemId}`)
+        .update({
+          placeId:       place?.id ?? "",
+          placePhotoRef: storageUrl ?? null,
+        });
+
+      return { ok: true };
+    } catch (error) {
+      if (error instanceof HttpsError) throw error;
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error("enrichItem error:", msg);
+      throw new HttpsError("internal", `エンリッチエラー: ${msg}`);
+    }
+  }
+);
+
+// ── ペア全件バックグラウンドエンリッチ ────────────────────────────────
 export const enrichPairItems = onCall(
   { invoker: "public", secrets: [mapsServerKey], enforceAppCheck: false, timeoutSeconds: 300 },
   async (request) => {
@@ -266,9 +409,17 @@ export const enrichPairItems = onCall(
       PLACE_CATEGORIES.includes(d.data().category as string)
     );
 
-    // 各アイテムを順次エンリッチ（レート制限のため 200ms ずつ待つ）
+    let enriched = 0;
+
     for (const docSnap of targets) {
-      const { title } = docSnap.data() as { title: string };
+      const { title, matchTier } = docSnap.data() as { title: string; matchTier?: string };
+
+      // try アイテムはスキップ（詳細画面を開いたときに lazy enrich）
+      if (matchTier === "try") {
+        await new Promise((r) => setTimeout(r, 50));
+        continue;
+      }
+
       const textQuery = prefecture ? `${title} ${prefecture}` : title;
 
       try {
@@ -277,7 +428,8 @@ export const enrichPairItems = onCall(
           headers: {
             "Content-Type": "application/json",
             "X-Goog-Api-Key": mapsServerKey.value(),
-            "X-Goog-FieldMask": "places.id,places.rating,places.photos,places.displayName",
+            // Essentials tier: places.id と places.photos のみ（無料枠 10,000件/月）
+            "X-Goog-FieldMask": "places.id,places.photos",
           },
           body: JSON.stringify({
             textQuery,
@@ -290,21 +442,30 @@ export const enrichPairItems = onCall(
         const data = await res.json() as {
           places?: Array<{
             id: string;
-            rating?: number;
             photos?: Array<{ name: string }>;
           }>;
         };
 
-        const candidates = (data.places ?? [])
-          .filter((p) => p.rating != null && p.photos && p.photos.length > 0);
-        candidates.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+        const candidates = (data.places ?? []).filter((p) => p.photos && p.photos.length > 0);
         const place = candidates[0] ?? null;
 
+        // 写真を Storage にキャッシュ
+        let storageUrl: string | null = null;
+        if (place?.photos?.[0]?.name) {
+          const storagePath = `pairs/${pairId}/items/${docSnap.id}.jpg`;
+          storageUrl = await cachePhotoToStorage(
+            place.photos[0].name,
+            storagePath,
+            mapsServerKey.value()
+          );
+        }
+
         await docSnap.ref.update({
-          placeId:       place?.id                ?? "",
-          placeRating:   place?.rating             ?? null,
-          placePhotoRef: place?.photos?.[0]?.name  ?? null,
+          placeId:       place?.id ?? "",
+          placePhotoRef: storageUrl ?? null,
         });
+
+        enriched++;
       } catch (e) {
         console.error(`enrichPairItems: failed for ${docSnap.id}`, e);
         // 1件失敗しても続行
@@ -314,73 +475,35 @@ export const enrichPairItems = onCall(
       await new Promise((r) => setTimeout(r, 200));
     }
 
-    return { enriched: targets.length };
+    return { enriched };
   }
 );
 
-// ── Places エンリッチ（アイテムにGoogle Places情報を付与） ────────────
-export const enrichItem = onCall(
-  { invoker: "public", secrets: [mapsServerKey], enforceAppCheck: false },
-  async (request) => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "ログインが必要です。");
-    }
+// ── アイテム削除トリガー（TTL 削除時に Storage 写真を削除） ────────────
+export const onItemDeleted = onDocumentDeleted(
+  {
+    document: "pairs/{pairId}/items/{itemId}",
+    region: "asia-northeast1",
+  },
+  async (event) => {
+    const data = event.data?.data();
+    if (!data) return;
 
-    const { pairId, itemId, title, prefecture } = request.data as {
-      pairId: string;
-      itemId: string;
-      title: string;
-      prefecture?: string;
-    };
+    const placePhotoRef: string | null = data.placePhotoRef ?? null;
+    // Storage URL でなければ何もしない（旧形式の photo name 参照など）
+    if (!placePhotoRef || !placePhotoRef.startsWith("https://storage.googleapis.com/")) return;
 
-    if (!pairId || !itemId || !title) {
-      throw new HttpsError("invalid-argument", "パラメータが不足しています。");
-    }
-
-    // 都道府県をクエリに追加してローカル検索精度を上げる
-    const textQuery = prefecture ? `${title} ${prefecture}` : title;
+    const { pairId, itemId } = event.params;
+    const storagePath = `pairs/${pairId}/items/${itemId}.jpg`;
 
     try {
-      const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Goog-Api-Key": mapsServerKey.value(),
-          "X-Goog-FieldMask": "places.id,places.photos",
-        },
-        body: JSON.stringify({
-          textQuery,
-          languageCode: "ja",
-          minRating: 3.5,          // サーバー側品質フィルター（レスポンスには含まれない）
-          pageSize: 5,
-        }),
-      });
-
-      const data = await res.json() as {
-        places?: Array<{
-          id: string;
-          photos?: Array<{ name: string }>;
-        }>;
-      };
-
-      // 写真ありの最初の候補を採用
-      const candidates = (data.places ?? []).filter((p) => p.photos && p.photos.length > 0);
-      const place = candidates[0] ?? null;
-
-      // placeId を "" にすることで「検索済みだが未発見」を表し、再呼び出しを防ぐ
-      await admin.firestore()
-        .doc(`pairs/${pairId}/items/${itemId}`)
-        .update({
-          placeId:       place?.id                ?? "",
-          placePhotoRef: place?.photos?.[0]?.name ?? null,
-        });
-
-      return { ok: true };
-    } catch (error) {
-      if (error instanceof HttpsError) throw error;
-      const msg = error instanceof Error ? error.message : String(error);
-      console.error("enrichItem error:", msg);
-      throw new HttpsError("internal", `エンリッチエラー: ${msg}`);
+      const bucket = admin.storage().bucket();
+      await bucket.file(storagePath).delete();
+      console.log(`onItemDeleted: deleted storage photo ${storagePath}`);
+    } catch (e) {
+      // ファイルが存在しない場合は無視
+      console.warn(`onItemDeleted: could not delete ${storagePath}`, e);
     }
   }
 );
+

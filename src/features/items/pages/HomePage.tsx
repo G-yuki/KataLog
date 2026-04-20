@@ -1,5 +1,5 @@
 // src/features/items/pages/HomePage.tsx
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useItems } from "../hooks/useItems";
 import { Loading } from "../../../components/Loading";
@@ -17,8 +17,11 @@ type Filter = "all" | Category;
 const CATEGORIES: Category[] = ["おでかけ", "映画", "食事", "本", "ゲーム", "音楽", "スポーツ", "その他"];
 const MAPS_KEY = import.meta.env.VITE_MAPS_BROWSER_KEY as string;
 
+// Storage URL はそのまま、旧形式（Places photo参照名）は API 経由で取得
 const photoUrl = (photoRef: string) =>
-  `https://places.googleapis.com/v1/${photoRef}/media?maxWidthPx=400&key=${MAPS_KEY}`;
+  photoRef.startsWith("https://")
+    ? photoRef
+    : `https://places.googleapis.com/v1/${photoRef}/media?maxWidthPx=400&key=${MAPS_KEY}`;
 
 export const HomePage = () => {
   const navigate = useNavigate();
@@ -29,6 +32,40 @@ export const HomePage = () => {
   const [filter, setFilter] = useState<Filter>("all");
   const [doneOpen, setDoneOpen] = useState(false);
   const [tryOpen, setTryOpen] = useState(false);
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const restoredRef = useRef(false);
+
+  // 詳細から戻った際に状態を復元
+  useEffect(() => {
+    if (!pairId || loading || restoredRef.current) return;
+    restoredRef.current = true;
+    try {
+      const saved = sessionStorage.getItem(`home_state_${pairId}`);
+      if (!saved) return;
+      const { filter: f, doneOpen: d, tryOpen: t, scrollTop: s } = JSON.parse(saved) as {
+        filter: Filter; doneOpen: boolean; tryOpen: boolean; scrollTop: number;
+      };
+      setFilter(f);
+      setDoneOpen(d);
+      setTryOpen(t);
+      requestAnimationFrame(() => {
+        if (scrollRef.current) scrollRef.current.scrollTop = s ?? 0;
+      });
+    } catch { /* ignore */ }
+  }, [pairId, loading]);
+
+  const navigateToDetail = (itemId: string) => {
+    if (pairId) {
+      try {
+        sessionStorage.setItem(`home_state_${pairId}`, JSON.stringify({
+          filter, doneOpen, tryOpen,
+          scrollTop: scrollRef.current?.scrollTop ?? 0,
+        }));
+      } catch { /* ignore */ }
+    }
+    navigate(`/home/${itemId}`);
+  };
 
   // 手動追加モーダル
   const [showAddModal, setShowAddModal] = useState(false);
@@ -137,7 +174,7 @@ export const HomePage = () => {
       {/* ── フィルター + 追加ボタン ── */}
       <div style={{ flexShrink: 0, display: "flex", alignItems: "center",
                     background: "var(--color-bg)", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
-        <div style={{ flex: 1, padding: "10px 0 8px 20px", display: "flex", gap: 6,
+        <div style={{ flex: 1, padding: "4px 0 4px 12px", display: "flex", gap: 6,
                       overflowX: "auto", scrollbarWidth: "none" }}>
           {(["all", ...CATEGORIES] as Filter[]).map((f) => (
             <button key={f} onClick={() => setFilter(f)}
@@ -152,15 +189,19 @@ export const HomePage = () => {
           ))}
         </div>
         <button onClick={() => setShowAddModal(true)}
-                style={{ flexShrink: 0, padding: "0 16px 0 10px", height: "100%",
-                         background: "none", border: "none", cursor: "pointer",
-                         display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <span style={{ fontSize: 22, color: "var(--color-primary)", lineHeight: 1 }}>+</span>
+                style={{ flexShrink: 0, padding: "0 16px 0 12px", height: "100%",
+                         background: "none", border: "none", borderLeft: "1px solid rgba(0,0,0,0.1)",
+                         cursor: "pointer", display: "flex", alignItems: "center", gap: 3 }}>
+          <span style={{ fontSize: 12, color: "var(--color-text-mid)",
+                         fontFamily: "var(--font-sans)", lineHeight: 1 }}>
+            追加
+          </span>
+          <span style={{ fontSize: 18, color: "var(--color-primary)", lineHeight: 1, fontWeight: 400 }}>+</span>
         </button>
       </div>
 
       {/* ── スクロールエリア ── */}
-      <div style={{ flex: 1, overflowY: "auto", scrollbarWidth: "none", paddingBottom: 80 }}>
+      <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", scrollbarWidth: "none", paddingBottom: 80 }}>
 
         {/* Go!! セクション */}
         {goItems.length > 0 && (
@@ -170,7 +211,7 @@ export const HomePage = () => {
                           overflowX: "auto", scrollbarWidth: "none" }}>
               {goItems.map((item) => (
                 <GoCard key={item.itemId} item={item}
-                        onClick={() => navigate(`/home/${item.itemId}`)}
+                        onClick={() => navigateToDetail(item.itemId)}
                         onDone={() => setStatus(item.itemId, "done")}
                         onWant={() => toggleIsWant(item.itemId, item.isWant)}
                         onDelete={() => removeItem(item.itemId)} />
@@ -187,7 +228,7 @@ export const HomePage = () => {
                           display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               {filteredGood.map((item) => (
                 <GoodCard key={item.itemId} item={item}
-                          onTap={() => navigate(`/home/${item.itemId}`)}
+                          onTap={() => navigateToDetail(item.itemId)}
                           onWant={() => toggleIsWant(item.itemId, item.isWant)}
                           onDone={() => setStatus(item.itemId, "done")}
                           onDelete={() => removeItem(item.itemId)} />
@@ -229,7 +270,7 @@ export const HomePage = () => {
                             display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                 {tryItems.map((item) => (
                   <GoodCard key={item.itemId} item={item}
-                            onTap={() => navigate(`/home/${item.itemId}`)}
+                            onTap={() => navigateToDetail(item.itemId)}
                             onWant={() => toggleIsWant(item.itemId, item.isWant)}
                             onDone={() => setStatus(item.itemId, "done")}
                             onDelete={() => removeItem(item.itemId)} />
@@ -258,7 +299,7 @@ export const HomePage = () => {
               <div style={{ padding: "0 20px" }}>
                 {doneItems.map((item) => (
                   <DoneRow key={item.itemId} item={item}
-                           onTap={() => navigate(`/home/${item.itemId}`)} />
+                           onTap={() => navigateToDetail(item.itemId)} />
                 ))}
               </div>
             )}
@@ -282,7 +323,7 @@ export const HomePage = () => {
                         maxHeight: "90dvh", overflowY: "auto", scrollbarWidth: "none" }}>
             <h2 style={{ fontFamily: "var(--font-sans)", fontSize: 17, fontWeight: 500,
                          color: "var(--color-text-main)", textAlign: "center" }}>
-              アイテムを追加
+              リストに追加
             </h2>
 
             {/* タイトル */}

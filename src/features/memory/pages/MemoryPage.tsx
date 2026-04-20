@@ -34,7 +34,7 @@ export const MemoryPage = () => {
 
   const allDoneItems = items
     .filter((i) => i.status === "done")
-    .sort((a, b) => (b.completedAt?.toMillis() ?? 0) - (a.completedAt?.toMillis() ?? 0));
+    .sort((a, b) => (a.completedAt?.toMillis() ?? 0) - (b.completedAt?.toMillis() ?? 0));
 
   const todoItems = items.filter((i) => i.status !== "done");
 
@@ -80,9 +80,8 @@ export const MemoryPage = () => {
         },
         { memory: string }
       >(functions, "generateMemory");
-      // AI には古い順（時系列）で送る
-      const chronological = [...filteredDoneItems].reverse();
-      const payload = chronological.map((i) => ({
+      // 古い順（昇順）でソート済みなのでそのまま渡す
+      const payload = filteredDoneItems.map((i) => ({
         title: i.title,
         category: i.category,
         rating: i.rating,
@@ -206,7 +205,7 @@ export const MemoryPage = () => {
               </div>
             ) : (
               <>
-                {/* 完了アイテム一覧（新しい順で表示） */}
+                {/* 完了アイテム一覧（古い順で表示） */}
                 <div>
                   <p style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-soft)",
                               letterSpacing: "0.08em", marginBottom: 10 }}>
