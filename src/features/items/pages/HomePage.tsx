@@ -9,6 +9,7 @@ import { db } from "../../../firebase/firestore";
 import { doc, getDoc } from "firebase/firestore";
 import { CATEGORY_STYLE } from "../../../lib/constants";
 import { BottomNav } from "../../../components/BottomNav";
+import { HomeGuide } from "../../setup/components/HomeGuide";
 import { addManualItem } from "../services/itemService";
 import type { Item, Category, ItemType, ItemStatus } from "../../../types";
 
@@ -31,6 +32,7 @@ export const HomePage = () => {
 
   const [filter, setFilter] = useState<Filter>("all");
   const [doneOpen, setDoneOpen] = useState(false);
+  const [showGuide, setShowGuide] = useState(() => !localStorage.getItem("homeGuideSeen"));
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const restoredRef = useRef(false);
@@ -172,7 +174,8 @@ export const HomePage = () => {
       {/* ── フィルター + 追加ボタン ── */}
       <div style={{ flexShrink: 0, display: "flex", alignItems: "center",
                     background: "var(--color-bg)", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
-        <div style={{ flex: 1, padding: "4px 0 4px 12px", display: "flex", gap: 6,
+        <div data-guide="filter-area"
+             style={{ flex: 1, padding: "4px 0 4px 12px", display: "flex", gap: 6,
                       overflowX: "auto", scrollbarWidth: "none" }}>
           {(["all", ...CATEGORIES] as Filter[]).map((f) => (
             <button key={f} onClick={() => setFilter(f)}
@@ -186,7 +189,8 @@ export const HomePage = () => {
             </button>
           ))}
         </div>
-        <button onClick={() => setShowAddModal(true)}
+        <button data-guide="add-btn"
+                onClick={() => setShowAddModal(true)}
                 style={{ flexShrink: 0, padding: "0 16px 0 12px", height: "100%",
                          background: "none", border: "none", borderLeft: "1px solid rgba(0,0,0,0.1)",
                          cursor: "pointer", display: "flex", alignItems: "center", gap: 3 }}>
@@ -207,8 +211,8 @@ export const HomePage = () => {
             <SectionLabel>お気に入り</SectionLabel>
             <div style={{ padding: "0 20px 12px", display: "flex", gap: 10,
                           overflowX: "auto", scrollbarWidth: "none" }}>
-              {goItems.map((item) => (
-                <GoCard key={item.itemId} item={item}
+              {goItems.map((item, i) => (
+                <GoCard key={item.itemId} item={item} isFirst={i === 0}
                         onClick={() => navigateToDetail(item.itemId)}
                         onDone={() => setStatus(item.itemId, "done")}
                         onWant={() => toggleIsWant(item.itemId, item.isWant)}
@@ -295,6 +299,14 @@ export const HomePage = () => {
 
       {/* ── ボトムナビ ── */}
       <BottomNav />
+
+      {/* ── ホームガイド（初回のみ） ── */}
+      {showGuide && !loading && items.length > 0 && (
+        <HomeGuide onClose={() => {
+          localStorage.setItem("homeGuideSeen", "1");
+          setShowGuide(false);
+        }} />
+      )}
 
       {/* ── 手動追加モーダル ── */}
       {showAddModal && (
@@ -441,8 +453,8 @@ const SectionLabel = ({ children, style }: { children: React.ReactNode; style?: 
   </p>
 );
 
-const GoCard = ({ item, onClick, onDone, onWant, onDelete }:
-  { item: Item; onClick: () => void; onDone: () => void; onWant: () => void; onDelete: () => void }) => {
+const GoCard = ({ item, onClick, onDone, onWant, onDelete, isFirst }:
+  { item: Item; onClick: () => void; onDone: () => void; onWant: () => void; onDelete: () => void; isFirst?: boolean }) => {
   const s = CATEGORY_STYLE[item.category] ?? CATEGORY_STYLE["その他"];
   const hasPhoto = !!item.placePhotoRef;
   return (
@@ -481,7 +493,8 @@ const GoCard = ({ item, onClick, onDone, onWant, onDelete }:
         </div>
       )}
       {/* ✓ 完了ボタン（右上） */}
-      <button onClick={(e) => { e.stopPropagation(); onDone(); }}
+      <button {...(isFirst ? { "data-guide": "done-btn" } : {})}
+              onClick={(e) => { e.stopPropagation(); onDone(); }}
               style={{ position: "absolute", top: 7, right: 7.5, zIndex: 3,
                        width: 17, height: 17, borderRadius: "50%",
                        background: "rgba(255,255,255,0.2)", border: "1.5px solid rgba(255,255,255,0.5)",
@@ -515,7 +528,8 @@ const GoCard = ({ item, onClick, onDone, onWant, onDelete }:
         </p>
       </div>
       {/* ❤️ お気に入り（右下） */}
-      <button onClick={(e) => { e.stopPropagation(); onWant(); }}
+      <button {...(isFirst ? { "data-guide": "heart-btn" } : {})}
+              onClick={(e) => { e.stopPropagation(); onWant(); }}
               style={{ position: "absolute", bottom: 11, right: 8, zIndex: 3,
                        background: "transparent", border: "none",
                        fontSize: 13, cursor: "pointer", lineHeight: 1 }}>
