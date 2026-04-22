@@ -34,7 +34,11 @@ export const MemoryPage = () => {
 
   const allDoneItems = items
     .filter((i) => i.status === "done")
-    .sort((a, b) => (a.completedAt?.toMillis() ?? 0) - (b.completedAt?.toMillis() ?? 0));
+    .sort((a, b) => {
+      const diff = (a.completedAt?.toMillis() ?? 0) - (b.completedAt?.toMillis() ?? 0);
+      if (diff !== 0) return diff;
+      return (a.createdAt?.toMillis() ?? 0) - (b.createdAt?.toMillis() ?? 0);
+    });
 
   const todoItems = items.filter((i) => i.status !== "done");
 

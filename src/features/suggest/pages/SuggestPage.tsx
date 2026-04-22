@@ -7,7 +7,7 @@ import { useGenerateItems } from "../../setup/hooks/useGenerateItems";
 import { addSuggestedItems } from "../../items/services/itemService";
 import { usePair } from "../../../contexts/PairContext";
 import { db } from "../../../firebase/firestore";
-import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, updateDoc, deleteField, serverTimestamp } from "firebase/firestore";
 import {
   GENRES, PREFECTURES, CATEGORY_STYLE,
   RANGE_OPTIONS, CHILDREN_OPTIONS, TRANSPORT_OPTIONS, BUDGET_OPTIONS, INDOOR_OPTIONS,
@@ -45,8 +45,6 @@ const OVERSEAS_COUNTRIES: Record<string, string[]> = {
   "中東・アフリカ": ["UAE（ドバイ）", "エジプト", "南アフリカ"],
 };
 
-const SESSION_KEY = (pairId: string) => `suggest_cache_${pairId}`;
-
 export const SuggestPage = () => {
   const navigate = useNavigate();
   const { generate, loading: generating } = useGenerateItems();
@@ -68,20 +66,11 @@ export const SuggestPage = () => {
     (async () => {
       const snap = await getDoc(doc(db, "pairs", pairId));
       if (snap.exists()) {
-        const h = snap.data().hearing as Hearing | undefined;
+        const data = snap.data();
+        const h = data.hearing as Hearing | undefined;
         if (h) setHearing(h);
-      }
-      // sessionStorage からキャッシュを復元
-      try {
-        const cached = sessionStorage.getItem(SESSION_KEY(pairId));
-        if (cached) {
-          const { suggestions: cachedSuggestions } = JSON.parse(cached) as { suggestions: ItemDraft[] };
-          if (cachedSuggestions?.length > 0) {
-            setSuggestions(cachedSuggestions);
-          }
-        }
-      } catch {
-        // キャッシュ読み込み失敗は無視
+        const pending = data.pendingSuggestions as ItemDraft[] | undefined;
+        if (pending && pending.length > 0) setSuggestions(pending);
       }
       setInitLoading(false);
     })();
@@ -96,13 +85,8 @@ export const SuggestPage = () => {
     if (items) {
       setSuggestions(items);
       setSelected(new Set());
-      // sessionStorage にキャッシュ保存
       if (pairId) {
-        try {
-          sessionStorage.setItem(SESSION_KEY(pairId), JSON.stringify({ suggestions: items }));
-        } catch {
-          // sessionStorage が使えない環境では無視
-        }
+        updateDoc(doc(db, "pairs", pairId), { pendingSuggestions: items }).catch(() => {});
       }
       setStep("results");
     } else {
@@ -134,10 +118,7 @@ export const SuggestPage = () => {
     setSaving(true);
     const drafts = [...selected].map((i) => suggestions[i]);
     await addSuggestedItems(pairId, drafts);
-    // キャッシュをクリア（追加済みのため）
-    if (pairId) {
-      try { sessionStorage.removeItem(SESSION_KEY(pairId)); } catch { /* ignore */ }
-    }
+    updateDoc(doc(db, "pairs", pairId), { pendingSuggestions: deleteField() }).catch(() => {});
     setSaving(false);
     setStep("done");
   };

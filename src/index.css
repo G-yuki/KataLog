@@ -43,6 +43,8 @@ body {
   min-height: 100vh;
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 /* ── 共通コンポーネント ── */
