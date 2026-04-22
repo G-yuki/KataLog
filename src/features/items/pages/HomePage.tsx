@@ -31,7 +31,6 @@ export const HomePage = () => {
 
   const [filter, setFilter] = useState<Filter>("all");
   const [doneOpen, setDoneOpen] = useState(false);
-  const [tryOpen, setTryOpen] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const restoredRef = useRef(false);
@@ -43,12 +42,11 @@ export const HomePage = () => {
     try {
       const saved = sessionStorage.getItem(`home_state_${pairId}`);
       if (!saved) return;
-      const { filter: f, doneOpen: d, tryOpen: t, scrollTop: s } = JSON.parse(saved) as {
-        filter: Filter; doneOpen: boolean; tryOpen: boolean; scrollTop: number;
+      const { filter: f, doneOpen: d, scrollTop: s } = JSON.parse(saved) as {
+        filter: Filter; doneOpen: boolean; scrollTop: number;
       };
       setFilter(f);
       setDoneOpen(d);
-      setTryOpen(t);
       requestAnimationFrame(() => {
         if (scrollRef.current) scrollRef.current.scrollTop = s ?? 0;
       });
@@ -59,7 +57,7 @@ export const HomePage = () => {
     if (pairId) {
       try {
         sessionStorage.setItem(`home_state_${pairId}`, JSON.stringify({
-          filter, doneOpen, tryOpen,
+          filter, doneOpen,
           scrollTop: scrollRef.current?.scrollTop ?? 0,
         }));
       } catch { /* ignore */ }
@@ -138,7 +136,7 @@ export const HomePage = () => {
           <div style={{ flex: 1 }}>
             <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 16, fontWeight: 600,
                          color: "var(--color-text-main)", letterSpacing: "0.01em" }}>
-              LIST: リスト一覧
+              おでかけ
             </h1>
             {pairNames && (
               <p style={{ fontSize: 11, color: "var(--color-text-mid)", marginTop: 3,
@@ -184,7 +182,7 @@ export const HomePage = () => {
                              border: filter === f ? "none" : "1px solid rgba(0,0,0,0.12)",
                              background: filter === f ? "var(--color-text-main)" : "transparent",
                              color: filter === f ? "var(--color-bg)" : "#5C4A35" }}>
-              {f === "all" ? "すべて" : f}
+              {f === "all" ? "すべて" : f === "おでかけ" ? "外出" : f}
             </button>
           ))}
         </div>
@@ -203,10 +201,10 @@ export const HomePage = () => {
       {/* ── スクロールエリア ── */}
       <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", scrollbarWidth: "none", paddingBottom: 80 }}>
 
-        {/* Go!! セクション */}
+        {/* お気に入りセクション */}
         {goItems.length > 0 && (
           <div style={{ borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
-            <SectionLabel>GO!! — 最優先リスト</SectionLabel>
+            <SectionLabel>お気に入り</SectionLabel>
             <div style={{ padding: "0 20px 12px", display: "flex", gap: 10,
                           overflowX: "auto", scrollbarWidth: "none" }}>
               {goItems.map((item) => (
@@ -220,55 +218,14 @@ export const HomePage = () => {
           </div>
         )}
 
-        {/* Good カードグリッド */}
-        {filteredGood.length > 0 ? (
-          <>
-            <SectionLabel style={{ paddingTop: 10 }}>GOOD — やりたいリスト</SectionLabel>
-            <div style={{ padding: "0 20px 4px",
-                          display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              {filteredGood.map((item) => (
-                <GoodCard key={item.itemId} item={item}
-                          onTap={() => navigateToDetail(item.itemId)}
-                          onWant={() => toggleIsWant(item.itemId, item.isWant)}
-                          onDone={() => setStatus(item.itemId, "done")}
-                          onDelete={() => removeItem(item.itemId)} />
-              ))}
-            </div>
-          </>
-        ) : (
-          activeItems.length === 0 && (
-            <EmptyState onAskAI={() => navigate("/suggest")} />
-          )
-        )}
-
-        {filteredGood.length === 0 && goodItems.length > 0 && (
-          <div style={{ padding: "40px 20px", textAlign: "center" }}>
-            <p style={{ fontSize: 13, color: "var(--color-text-soft)" }}>
-              このカテゴリにはアイテムがありません
-            </p>
-          </div>
-        )}
-
-        {/* TRY トグル */}
-        {tryItems.length > 0 && (
-          <>
-            <button onClick={() => setTryOpen((o) => !o)}
-                    style={{ width: "100%", display: "flex", alignItems: "center", gap: 10,
-                             padding: "14px 20px", background: "transparent", border: "none",
-                             borderTop: "1px solid rgba(0,0,0,0.06)", cursor: "pointer" }}>
-              <div style={{ flex: 1, height: 1, background: "rgba(0,0,0,0.08)" }} />
-              <span style={{ fontSize: 11, color: "var(--color-text-mid)",
-                             letterSpacing: "0.06em", whiteSpace: "nowrap",
-                             fontFamily: "var(--font-sans)" }}>
-                {tryOpen ? `TRY ${tryItems.length}件を隠す`
-                         : `TRY — 試してみる？ ${tryItems.length}件`}
-              </span>
-              <div style={{ flex: 1, height: 1, background: "rgba(0,0,0,0.08)" }} />
-            </button>
-            {tryOpen && (
+        {/* おすすめセクション */}
+        <div>
+          {filteredGood.length > 0 ? (
+            <>
+              <SectionLabel>おすすめ</SectionLabel>
               <div style={{ padding: "0 20px 4px",
                             display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                {tryItems.map((item) => (
+                {filteredGood.map((item) => (
                   <GoodCard key={item.itemId} item={item}
                             onTap={() => navigateToDetail(item.itemId)}
                             onWant={() => toggleIsWant(item.itemId, item.isWant)}
@@ -276,24 +233,51 @@ export const HomePage = () => {
                             onDelete={() => removeItem(item.itemId)} />
                 ))}
               </div>
-            )}
-          </>
+            </>
+          ) : (
+            activeItems.length === 0 && (
+              <EmptyState onAskAI={() => navigate("/suggest")} />
+            )
+          )}
+          {filteredGood.length === 0 && goodItems.length > 0 && (
+            <div style={{ padding: "40px 20px", textAlign: "center" }}>
+              <p style={{ fontSize: 13, color: "var(--color-text-soft)" }}>
+                このカテゴリにはアイテムがありません
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* 試してみる？セクション */}
+        {tryItems.length > 0 && (
+          <div style={{ borderTop: "1px solid rgba(0,0,0,0.05)" }}>
+            <SectionLabel>試してみる？</SectionLabel>
+            <div style={{ padding: "0 20px 4px",
+                          display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              {tryItems.map((item) => (
+                <GoodCard key={item.itemId} item={item}
+                          onTap={() => navigateToDetail(item.itemId)}
+                          onWant={() => toggleIsWant(item.itemId, item.isWant)}
+                          onDone={() => setStatus(item.itemId, "done")}
+                          onDelete={() => removeItem(item.itemId)} />
+              ))}
+            </div>
+          </div>
         )}
 
         {/* 完了トグル */}
         {doneItems.length > 0 && (
           <>
             <button onClick={() => setDoneOpen((o) => !o)}
-                    style={{ width: "100%", display: "flex", alignItems: "center", gap: 10,
-                             padding: "14px 20px", background: "transparent", border: "none",
-                             borderTop: "1px solid rgba(0,0,0,0.06)", cursor: "pointer" }}>
-              <div style={{ flex: 1, height: 1, background: "rgba(0,0,0,0.08)" }} />
-              <span style={{ fontSize: 11, color: "var(--color-text-mid)",
-                             letterSpacing: "0.06em", whiteSpace: "nowrap" }}>
-                {doneOpen ? `完了済み ${doneItems.length}件を隠す`
-                          : `完了済み ${doneItems.length}件を見る ✨`}
+                    style={{ width: "100%", display: "flex", alignItems: "center",
+                             padding: "12px 20px 8px", background: "var(--color-bg)", border: "none",
+                             borderTop: "1px solid rgba(0,0,0,0.05)", cursor: "pointer",
+                             position: "sticky", top: 0, zIndex: 10 }}>
+              <span style={{ fontSize: 12, color: "var(--color-text-mid)",
+                             fontFamily: "var(--font-sans)", fontWeight: 600, flex: 1, textAlign: "left" }}>
+                {doneOpen ? `完了済み ${doneItems.length}件を閉じる ▲`
+                          : `完了済み ${doneItems.length}件を開く ▼`}
               </span>
-              <div style={{ flex: 1, height: 1, background: "rgba(0,0,0,0.08)" }} />
             </button>
             {doneOpen && (
               <div style={{ padding: "0 20px" }}>
@@ -449,9 +433,10 @@ const ModalLabel = ({ children }: { children: React.ReactNode }) => (
 );
 
 const SectionLabel = ({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) => (
-  <p style={{ padding: "16px 20px 10px", fontSize: 10, letterSpacing: "0.14em",
-              color: "var(--color-text-mid)", textTransform: "uppercase",
-              fontFamily: "var(--font-sans)", ...style }}>
+  <p style={{ padding: "12px 20px 8px", fontSize: 12, letterSpacing: "0.08em",
+              color: "var(--color-text-mid)", fontFamily: "var(--font-sans)", fontWeight: 600,
+              position: "sticky", top: 0, zIndex: 10,
+              background: "var(--color-bg)", ...style }}>
     {children}
   </p>
 );

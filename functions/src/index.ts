@@ -242,44 +242,8 @@ ${todoList}
   }
 );
 
-// ── Storage に写真をキャッシュするヘルパー ────────────────────
+// ── 対象カテゴリ ────────────────────────────────────────────
 const PLACE_CATEGORIES = ["おでかけ", "食事", "スポーツ", "映画", "音楽"];
-
-const cachePhotoToStorage = async (
-  photoName: string,
-  storagePath: string,
-  apiKey: string
-): Promise<string | null> => {
-  try {
-    // Places API からメディアURIを取得（skipHttpRedirect=true でJSON応答）
-    const mediaRes = await fetch(
-      `https://places.googleapis.com/v1/${photoName}/media?maxWidthPx=800&skipHttpRedirect=true`,
-      { headers: { "X-Goog-Api-Key": apiKey } }
-    );
-    if (!mediaRes.ok) return null;
-    const mediaData = await mediaRes.json() as { photoUri?: string };
-    if (!mediaData.photoUri) return null;
-
-    // 実際の画像をフェッチ
-    const imgRes = await fetch(mediaData.photoUri);
-    if (!imgRes.ok) return null;
-    const imgBuffer = await imgRes.arrayBuffer();
-
-    // Firebase Storage にアップロード
-    const bucket = admin.storage().bucket();
-    const file = bucket.file(storagePath);
-    await file.save(Buffer.from(imgBuffer), {
-      contentType: "image/jpeg",
-      metadata: { cacheControl: "public, max-age=31536000" },
-    });
-    await file.makePublic();
-
-    return `https://storage.googleapis.com/${bucket.name}/${storagePath}`;
-  } catch (e) {
-    console.error("cachePhotoToStorage failed:", storagePath, e);
-    return null;
-  }
-};
 
 // ── URL リダイレクト解決 + 場所名抽出 ────────────────────────
 const resolvePlaceNameFromUrl = async (url: string): Promise<string | null> => {
@@ -331,7 +295,7 @@ export const enrichItem = onCall(
         headers: {
           "Content-Type": "application/json",
           "X-Goog-Api-Key": mapsServerKey.value(),
-          "X-Goog-FieldMask": "places.id,places.photos",
+          "X-Goog-FieldMask": "places.id,places.photos,places.location",
         },
         body: JSON.stringify({
           textQuery,
@@ -345,29 +309,21 @@ export const enrichItem = onCall(
         places?: Array<{
           id: string;
           photos?: Array<{ name: string }>;
+          location?: { latitude: number; longitude: number };
         }>;
       };
 
       const candidates = (data.places ?? []).filter((p) => p.photos && p.photos.length > 0);
       const place = candidates[0] ?? null;
 
-      // 写真を Storage にキャッシュ
-      let storageUrl: string | null = null;
-      if (place?.photos?.[0]?.name) {
-        const storagePath = `pairs/${pairId}/items/${itemId}.jpg`;
-        storageUrl = await cachePhotoToStorage(
-          place.photos[0].name,
-          storagePath,
-          mapsServerKey.value()
-        );
-      }
-
       // placeId を "" にすることで「検索済みだが未発見」を表し、再呼び出しを防ぐ
       await admin.firestore()
         .doc(`pairs/${pairId}/items/${itemId}`)
         .update({
           placeId:       place?.id ?? "",
-          placePhotoRef: storageUrl ?? null,
+          placePhotoRef: place?.photos?.[0]?.name ?? null,
+          lat:           place?.location?.latitude ?? null,
+          lng:           place?.location?.longitude ?? null,
         });
 
       return { ok: true };
@@ -428,8 +384,7 @@ export const enrichPairItems = onCall(
           headers: {
             "Content-Type": "application/json",
             "X-Goog-Api-Key": mapsServerKey.value(),
-            // Essentials tier: places.id と places.photos のみ（無料枠 10,000件/月）
-            "X-Goog-FieldMask": "places.id,places.photos",
+            "X-Goog-FieldMask": "places.id,places.photos,places.location",
           },
           body: JSON.stringify({
             textQuery,
@@ -443,26 +398,18 @@ export const enrichPairItems = onCall(
           places?: Array<{
             id: string;
             photos?: Array<{ name: string }>;
+            location?: { latitude: number; longitude: number };
           }>;
         };
 
         const candidates = (data.places ?? []).filter((p) => p.photos && p.photos.length > 0);
         const place = candidates[0] ?? null;
 
-        // 写真を Storage にキャッシュ
-        let storageUrl: string | null = null;
-        if (place?.photos?.[0]?.name) {
-          const storagePath = `pairs/${pairId}/items/${docSnap.id}.jpg`;
-          storageUrl = await cachePhotoToStorage(
-            place.photos[0].name,
-            storagePath,
-            mapsServerKey.value()
-          );
-        }
-
         await docSnap.ref.update({
           placeId:       place?.id ?? "",
-          placePhotoRef: storageUrl ?? null,
+          placePhotoRef: place?.photos?.[0]?.name ?? null,
+          lat:           place?.location?.latitude ?? null,
+          lng:           place?.location?.longitude ?? null,
         });
 
         enriched++;
@@ -490,8 +437,10 @@ export const onItemDeleted = onDocumentDeleted(
     if (!data) return;
 
     const placePhotoRef: string | null = data.placePhotoRef ?? null;
-    // Storage URL でなければ何もしない（旧形式の photo name 参照など）
-    if (!placePhotoRef || !placePhotoRef.startsWith("https://storage.googleapis.com/")) return;
+    // Storage URL でなければ何もしない
+    if (!placePhotoRef ||
+        (!placePhotoRef.startsWith("https://storage.googleapis.com/") &&
+         !placePhotoRef.startsWith("https://firebasestorage.googleapis.com/"))) return;
 
     const { pairId, itemId } = event.params;
     const storagePath = `pairs/${pairId}/items/${itemId}.jpg`;

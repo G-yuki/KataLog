@@ -167,7 +167,7 @@ export const SuggestPage = () => {
         )}
         <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 16, fontWeight: 600, color: "var(--color-text-main)",
                      letterSpacing: "0.01em" }}>
-          {step === "update-hearing" ? "プランを更新" : "SUGGEST: おすすめ体験提案"}
+          {step === "update-hearing" ? "プランを更新" : "おすすめ体験"}
         </h1>
         <img src="/logo.png" alt="KataLog" style={{ marginLeft: "auto", height: 18, objectFit: "contain" }} />
       </header>
@@ -204,10 +204,12 @@ export const SuggestPage = () => {
                   })}
                   {hearing.overseas
                     ? <Chip>✈️ {hearing.overseas}</Chip>
-                    : <>
-                        {hearing.prefecture && <Chip>{hearing.prefecture}</Chip>}
-                        {hearing.range && <Chip>{RANGE_LABELS[hearing.range]}</Chip>}
-                      </>
+                    : hearing.prefecture === "全国"
+                      ? <Chip>🗾 全国</Chip>
+                      : <>
+                          {hearing.prefecture && <Chip>{hearing.prefecture}</Chip>}
+                          {hearing.range && <Chip>{RANGE_LABELS[hearing.range]}</Chip>}
+                        </>
                   }
                   {hearing.indoor && <Chip>{INDOOR_LABELS[hearing.indoor]}</Chip>}
                   {hearing.budget && <Chip>{BUDGET_LABELS[hearing.budget]}</Chip>}
@@ -509,7 +511,7 @@ const UpdateHearingForm = ({
   const canSubmit = (hearing.genres?.length ?? 0) > 0
     && !!hearing.children && !!hearing.transport
     && !!hearing.budget && !!hearing.indoor
-    && (isOverseas || (!!hearing.prefecture && !!hearing.range));
+    && (isOverseas || hearing.prefecture === "全国" || (!!hearing.prefecture && !!hearing.range));
 
   return (
     <div style={{ padding: "24px 20px 40px", display: "flex", flexDirection: "column", gap: 24 }}>
@@ -550,21 +552,41 @@ const UpdateHearingForm = ({
 
         {!isOverseas ? (
           <>
-            <select value={hearing.prefecture ?? ""} onChange={(e) => set("prefecture", e.target.value)}
-                    style={{ width: "100%", padding: "10px 12px", fontSize: 13,
-                             border: "1.5px solid var(--color-border)", borderRadius: 10,
-                             background: "#fff", color: "var(--color-text-main)",
-                             fontFamily: "var(--font-sans)", marginBottom: 8 }}>
-              <option value="">都道府県を選択</option>
-              {PREFECTURES.map((p) => <option key={p} value={p}>{p}</option>)}
-            </select>
-            <div style={{ display: "flex", gap: 8 }}>
-              {RANGE_OPTIONS.map((r) => (
-                <ToggleChip key={r.id} selected={hearing.range === r.id} onClick={() => set("range", r.id)}>
-                  {r.label}
-                </ToggleChip>
-              ))}
+            {/* 全国 トグル */}
+            <div style={{ marginBottom: 8 }}>
+              <ToggleChip
+                selected={hearing.prefecture === "全国"}
+                onClick={() => {
+                  if (hearing.prefecture === "全国") {
+                    onChange({ ...hearing, prefecture: undefined });
+                  } else {
+                    onChange({ ...hearing, prefecture: "全国", range: undefined });
+                  }
+                }}
+              >
+                🗾 全国
+              </ToggleChip>
             </div>
+            {/* 全国以外のとき：都道府県＋範囲 */}
+            {hearing.prefecture !== "全国" && (
+              <>
+                <select value={hearing.prefecture ?? ""} onChange={(e) => set("prefecture", e.target.value)}
+                        style={{ width: "100%", padding: "10px 12px", fontSize: 13,
+                                 border: "1.5px solid var(--color-border)", borderRadius: 10,
+                                 background: "#fff", color: "var(--color-text-main)",
+                                 fontFamily: "var(--font-sans)", marginBottom: 8 }}>
+                  <option value="">都道府県を選択</option>
+                  {PREFECTURES.map((p) => <option key={p} value={p}>{p}</option>)}
+                </select>
+                <div style={{ display: "flex", gap: 8 }}>
+                  {RANGE_OPTIONS.map((r) => (
+                    <ToggleChip key={r.id} selected={hearing.range === r.id} onClick={() => set("range", r.id)}>
+                      {r.label}
+                    </ToggleChip>
+                  ))}
+                </div>
+              </>
+            )}
           </>
         ) : (
           <>

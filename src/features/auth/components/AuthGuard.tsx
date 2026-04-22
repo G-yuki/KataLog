@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { Loading } from "../../../components/Loading";
 import { getInviteParams } from "../../../lib/token";
+import { IntroSlides } from "./IntroSlides";
 
 type Props = { children: ReactNode };
 
@@ -12,6 +13,9 @@ const isLineBrowser = () => /Line/i.test(navigator.userAgent);
 export const AuthGuard = ({ children }: Props) => {
   const { user, loading, error, signIn } = useAuth();
   const [agreed, setAgreed] = useState(false);
+  const [showIntro, setShowIntro] = useState(
+    () => !localStorage.getItem("katalog_intro_seen")
+  );
   const hasInvite = getInviteParams() !== null;
 
   if (loading) return (
@@ -49,6 +53,13 @@ export const AuthGuard = ({ children }: Props) => {
   }
 
   if (!user) {
+    if (showIntro) return (
+      <IntroSlides onDone={() => {
+        localStorage.setItem("katalog_intro_seen", "1");
+        setShowIntro(false);
+      }} />
+    );
+
     return (
       <div className="auth-screen">
         <img src="/logo.png" alt="KataLog" style={{ height: 40 }} />

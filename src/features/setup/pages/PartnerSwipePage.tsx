@@ -1,5 +1,5 @@
 // src/features/setup/pages/PartnerSwipePage.tsx
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/hooks/useAuth";
 import { Loading } from "../../../components/Loading";
@@ -12,7 +12,7 @@ import {
 } from "../../items/services/itemService";
 import { SwipeTutorial } from "../components/SwipeTutorial";
 import { db } from "../../../firebase/firestore";
-import { doc, onSnapshot } from "firebase/firestore";
+import { collection, doc, getDoc, onSnapshot } from "firebase/firestore";
 import type { PendingItem, SwipeAction } from "../../../types";
 import { OUTDOOR_CATEGORIES } from "../../../lib/constants";
 
@@ -29,12 +29,7 @@ export const PartnerSwipePage = () => {
   const [waitingPartner, setWaitingPartner] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showTutorial, setShowTutorial] = useState(true);
-
-  const startX = useRef<number | null>(null);
-  const startY = useRef<number | null>(null);
-  const [dragX, setDragX] = useState(0);
-  const [dragY, setDragY] = useState(0);
-  const [dragging, setDragging] = useState(false);
+  const [animating, setAnimating] = useState<SwipeAction | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -44,38 +39,62 @@ export const PartnerSwipePage = () => {
     });
   }, [user, navigate]);
 
+  // pairId確定後: スワイプ済みかチェック（ページリロード復帰対策）
   useEffect(() => {
     if (!pairId) return;
+    getDoc(doc(db, "pairs", pairId)).then((snap) => {
+      if (!snap.exists()) return;
+      const data = snap.data();
+      if (data.matchingFinalized) {
+        navigate("/home", { replace: true });
+      } else if (data.partnerSwipesDone) {
+        setInitLoading(false);
+        setWaitingPartner(true);
+      }
+    }).catch(() => {});
+  }, [pairId, navigate]);
+
+  // pendingItems を一度だけ読み込む（未スワイプ時のみ）
+  useEffect(() => {
+    if (!pairId || waitingPartner) return;
     const unsub = subscribePendingItems(pairId, (items) => {
       if (items.length > 0) {
-        setPendingItems(items);
+        setPendingItems(items.slice(0, 20));
         setInitLoading(false);
         unsub();
       }
     });
     return () => unsub();
-  }, [pairId]);
+  }, [pairId, waitingPartner]);
 
-  // 待機中: matchingFinalized を監視 → 完了したら /home へ
+  // 待機中: items コレクションに追加されたら Hard Reload → startup check が /home へ誘導
   useEffect(() => {
     if (!waitingPartner || !pairId) return;
-    const unsub = onSnapshot(doc(db, "pairs", pairId), (snap) => {
-      if (snap.data()?.matchingFinalized) {
-        navigate("/home", { replace: true });
+    const itemsRef = collection(db, "pairs", pairId, "items");
+    let triggered = false;
+    const unsub = onSnapshot(itemsRef, (snap) => {
+      if (!snap.empty && !triggered) {
+        triggered = true;
+        unsub();
+        setTimeout(() => window.location.reload(), 1500);
       }
     });
     return () => unsub();
-  }, [waitingPartner, pairId, navigate]);
+  }, [waitingPartner, pairId]);
 
   const current = pendingItems[index];
   const isOutdoor = current ? OUTDOOR_CATEGORIES.includes(current.category as never) : false;
 
-  const handleAction = (action: SwipeAction) => {
-    if (!current) return;
-    setResults((prev) => [...prev, { pendingItemId: current.pendingItemId, action }]);
-    setDragX(0);
-    setDragY(0);
-    setIndex((i) => i + 1);
+  // ボタン押下: アニメーション → 結果記録 → 次へ
+  const handleButtonClick = (action: SwipeAction) => {
+    if (animating || !current) return;
+    const item = current;
+    setAnimating(action);
+    setTimeout(() => {
+      setResults((prev) => [...prev, { pendingItemId: item.pendingItemId, action }]);
+      setIndex((i) => i + 1);
+      setAnimating(null);
+    }, 450);
   };
 
   useEffect(() => {
@@ -84,18 +103,13 @@ export const PartnerSwipePage = () => {
       if (!pairId) return;
       setSaving(true);
       try {
-        // 1. スワイプ結果を一括書き込み（atomic batch）
         await savePartnerSwipes(pairId, results);
-
-        // 2. doneフラグをtransactionでセット → 両者揃ったか確認
         const bothDone = await markSwipesDoneAndCheck(pairId, "partner");
-
         if (bothDone) {
-          // 自分が最後 → マッチング実行
           await finalizePairMatching(pairId);
-          navigate("/home", { replace: true });
+          // Hard Reload: startup check が matchingFinalized を見て /home へ
+          setTimeout(() => window.location.reload(), 1500);
         } else {
-          // 相手待ち → onSnapshotで matchingFinalized を監視
           setSaving(false);
           setWaitingPartner(true);
         }
@@ -107,31 +121,8 @@ export const PartnerSwipePage = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, pendingItems.length]);
 
-  const onPointerDown = (e: React.PointerEvent) => {
-    startX.current = e.clientX;
-    startY.current = e.clientY;
-    setDragging(true);
-  };
-  const onPointerMove = (e: React.PointerEvent) => {
-    if (!dragging || startX.current === null || startY.current === null) return;
-    setDragX(e.clientX - startX.current);
-    setDragY(e.clientY - startY.current);
-  };
-  const onPointerUp = () => {
-    if (!dragging) return;
-    setDragging(false);
-    const absX = Math.abs(dragX);
-    const absY = Math.abs(dragY);
-    if (absY > absX && dragY < -80)  handleAction("go");
-    else if (dragX > 80)             handleAction("good");
-    else if (dragX < -80)            handleAction("pass");
-    else { setDragX(0); setDragY(0); }
-    startX.current = null;
-    startY.current = null;
-  };
-
   if (initLoading) return <Loading message="リストを読み込み中..." />;
-  if (saving)      return <Loading message="マッチング中..." />;
+  if (saving)      return <Loading message="最適なリストを作成中..." />;
 
   if (error) return (
     <div className="flex flex-col items-center justify-center min-h-screen gap-4 px-6 text-center">
@@ -142,16 +133,15 @@ export const PartnerSwipePage = () => {
     </div>
   );
 
-  // 相手のスワイプ待ち画面
   if (waitingPartner) return (
     <div className="flex flex-col items-center justify-center min-h-screen px-6 gap-6 text-center"
          style={{ background: "var(--color-bg)", fontFamily: "var(--font-sans)" }}>
       <p className="text-7xl">✅</p>
       <h2 className="text-2xl font-bold" style={{ color: "var(--color-text-main)" }}>
-        あなたのスワイプが完了！
+        あなたの選択が完了！
       </h2>
       <p className="text-sm leading-relaxed" style={{ color: "var(--color-text-mid)" }}>
-        相手のスワイプを待っています。<br />
+        相手の選択を待っています。<br />
         完了するとリストが自動で作成されます。
       </p>
       <div className="flex gap-2 mt-2">
@@ -165,13 +155,11 @@ export const PartnerSwipePage = () => {
 
   if (!current) return null;
 
-  const rotation = dragX * 0.08;
-  const opacity  = Math.max(0, 1 - Math.abs(dragX) / 300);
-  const absX = Math.abs(dragX);
-  const absY = Math.abs(dragY);
-  const isGoHint   = absY > absX && dragY < -30;
-  const isGoodHint = !isGoHint && dragX > 30;
-  const isPassHint = !isGoHint && dragX < -30;
+  const cardTransform =
+    animating === "go"   ? "translateY(-220px) rotate(-5deg)" :
+    animating === "pass" ? "translateX(-220px) rotate(-15deg)" :
+    animating === "good" ? "translateX(220px) rotate(15deg)" :
+    "none";
 
   return (
     <div className="flex flex-col items-center justify-between min-h-screen px-4 py-8"
@@ -179,11 +167,8 @@ export const PartnerSwipePage = () => {
       {showTutorial && <SwipeTutorial onClose={() => setShowTutorial(false)} isPartner />}
 
       <div className="w-full max-w-sm text-center">
-        <p className="text-xs mb-1" style={{ color: "var(--color-text-soft)", letterSpacing: "0.1em" }}>
-          PARTNER SWIPE
-        </p>
         <p className="text-sm font-bold mb-2" style={{ color: "var(--color-text-mid)" }}>
-          {index + 1} / {pendingItems.length}
+          残り {pendingItems.length - index}件
         </p>
         <div className="w-full h-1.5 rounded-full" style={{ background: "var(--color-border)" }}>
           <div className="h-1.5 rounded-full transition-all"
@@ -193,19 +178,14 @@ export const PartnerSwipePage = () => {
       </div>
 
       <div className="relative w-full max-w-sm">
-        <div className="card w-full p-6 flex flex-col items-center gap-4 cursor-grab active:cursor-grabbing select-none"
+        <div className="card w-full p-6 flex flex-col items-center gap-4 select-none"
              style={{
-               transform: `translateX(${dragX}px) translateY(${Math.min(0, dragY)}px) rotate(${rotation}deg)`,
-               opacity,
-               transition: dragging ? "none" : "transform 0.3s ease, opacity 0.3s ease",
-               touchAction: "none",
+               transform: cardTransform,
+               opacity: animating ? 0 : 1,
+               transition: "transform 0.4s ease, opacity 0.35s ease",
                minHeight: 280,
                justifyContent: "center",
-             }}
-             onPointerDown={onPointerDown}
-             onPointerMove={onPointerMove}
-             onPointerUp={onPointerUp}
-             onPointerLeave={onPointerUp}>
+             }}>
           <span className="text-5xl">{isOutdoor ? "🗺️" : "🏠"}</span>
           <p className="text-xl font-bold text-center" style={{ color: "var(--color-text-main)" }}>
             {current.title}
@@ -213,44 +193,32 @@ export const PartnerSwipePage = () => {
           <div className="flex gap-2 flex-wrap justify-center">
             <Tag label={current.category} />
           </div>
-          {isGoodHint && (
-            <div className="absolute top-4 right-4 text-2xl font-black"
-                 style={{ color: "var(--color-primary)", opacity: Math.min(1, dragX / 80) }}>
-              Good ⇨
-            </div>
-          )}
-          {isPassHint && (
-            <div className="absolute top-4 left-4 text-2xl font-black"
-                 style={{ color: "var(--color-text-soft)", opacity: Math.min(1, -dragX / 80) }}>
-              ⇦ Pass
-            </div>
-          )}
-          {isGoHint && (
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 text-2xl font-black"
-                 style={{ color: "#f43f5e", opacity: Math.min(1, -dragY / 80) }}>
-              ⇧ Go!!
-            </div>
-          )}
         </div>
       </div>
 
       <div className="w-full max-w-sm flex flex-col gap-3">
         <button className="w-full py-3 rounded-2xl font-bold text-sm"
-                style={{ background: "#f43f5e", color: "white" }}
-                onClick={() => handleAction("go")}>
-          ⇧ Go!! （最優先）
+                style={{ background: "#f43f5e", color: "white",
+                         opacity: animating ? 0.4 : 1, transition: "opacity 0.2s" }}
+                disabled={!!animating}
+                onClick={() => handleButtonClick("go")}>
+          興味アリ ↑
         </button>
         <div className="flex gap-3">
           <button className="flex-1 py-4 rounded-2xl border-2 font-bold text-sm"
                   style={{ borderColor: "var(--color-border)", color: "var(--color-text-mid)",
-                           background: "var(--color-surface)" }}
-                  onClick={() => handleAction("pass")}>
-            ⇦ Pass
+                           background: "var(--color-surface)",
+                           opacity: animating ? 0.4 : 1, transition: "opacity 0.2s" }}
+                  disabled={!!animating}
+                  onClick={() => handleButtonClick("pass")}>
+            ← 興味なし
           </button>
           <button className="flex-1 py-4 rounded-2xl font-bold text-sm"
-                  style={{ background: "var(--color-primary)", color: "white" }}
-                  onClick={() => handleAction("good")}>
-            Good ⇨
+                  style={{ background: "var(--color-primary)", color: "white",
+                           opacity: animating ? 0.4 : 1, transition: "opacity 0.2s" }}
+                  disabled={!!animating}
+                  onClick={() => handleButtonClick("good")}>
+            あとで →
           </button>
         </div>
       </div>

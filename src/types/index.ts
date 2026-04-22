@@ -66,6 +66,8 @@ export interface Item {
   placeName: string | null;
   placeRating: number | null;
   placePhotoRef: string | null;
+  lat: number | null;
+  lng: number | null;
   userPlaceUrl?: string | null;
 }
 

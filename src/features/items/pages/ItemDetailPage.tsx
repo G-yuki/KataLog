@@ -42,7 +42,8 @@ export const ItemDetailPage = () => {
   const [urlDraft, setUrlDraft] = useState("");
   const [urlSaving, setUrlSaving] = useState(false);
   const [editingCompletedAt, setEditingCompletedAt] = useState(false);
-  const [completedAtDraft, setCompletedAtDraft] = useState("");
+  const [completedAtDate, setCompletedAtDate] = useState("");
+  const [completedAtHour, setCompletedAtHour] = useState(12);
   const enrichCalled = useRef(false);
 
   useEffect(() => {
@@ -58,25 +59,33 @@ export const ItemDetailPage = () => {
     setRating(item.rating ?? null);
   }, [item]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Places エンリッチ：placeId が null（未取得）かつ対象カテゴリのとき1回だけ呼ぶ
+  // Places エンリッチ: 写真未取得のとき1回だけ呼ぶ
   useEffect(() => {
     if (!item || !pairId || enrichCalled.current) return;
+    // カテゴリ対象 or userPlaceUrl設定済み → 写真がなければ試行
+    // placeId==="" は「検索済み未発見」なので userPlaceUrl なしの場合はスキップ
     const needsEnrich =
-      item.placeId === null &&
-      (PLACE_CATEGORIES as readonly string[]).includes(item.category);
+      item.placePhotoRef === null && (
+        (item.placeId !== "" && (PLACE_CATEGORIES as readonly string[]).includes(item.category)) ||
+        !!item.userPlaceUrl
+      );
     if (!needsEnrich) return;
 
     enrichCalled.current = true;
     (async () => {
-      // pair ドキュメントから prefecture を取得してクエリ精度を上げる
       const pairSnap = await getDoc(doc(db, "pairs", pairId));
       const prefecture = pairSnap.exists()
         ? (pairSnap.data().hearing?.prefecture as string | undefined)
         : undefined;
 
       const fn = httpsCallable(functions, "enrichItem");
-      fn({ pairId, itemId: item.itemId, title: item.title, prefecture }).catch(() => {
-        // エラーは無視（次回アクセス時にも placeId === null のまま再試行される）
+      fn({
+        pairId,
+        itemId: item.itemId,
+        title: item.title,
+        prefecture,
+        userPlaceUrl: item.userPlaceUrl ?? undefined,
+      }).catch(() => {
         enrichCalled.current = false;
       });
     })();
@@ -136,9 +145,9 @@ export const ItemDetailPage = () => {
 
   const handleSaveCompletedAt = async () => {
     if (!item) return;
-    const [y, m, d] = completedAtDraft.split("-").map(Number);
+    const [y, m, d] = completedAtDate.split("-").map(Number);
     if (!y || !m || !d) return;
-    const date = new Date(y, m - 1, d, 12, 0, 0); // 正午固定（タイムゾーンずれ回避）
+    const date = new Date(y, m - 1, d, completedAtHour, 0, 0);
     const { Timestamp } = await import("firebase/firestore");
     await saveDetail(item.itemId, { completedAt: Timestamp.fromDate(date) });
     setEditingCompletedAt(false);
@@ -161,7 +170,8 @@ export const ItemDetailPage = () => {
   const isDone = item.status === "done";
   const isPlaceCategory = (PLACE_CATEGORIES as readonly string[]).includes(item.category);
   const hasPhoto = !!item.placePhotoRef;
-  const isEnriching = item.placeId === null && isPlaceCategory;
+  const isEnriching = item.placePhotoRef === null &&
+    ((item.placeId !== "" && isPlaceCategory) || !!item.userPlaceUrl);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100dvh",
@@ -201,11 +211,17 @@ export const ItemDetailPage = () => {
             </div>
           )}
           {/* お気に入りボタン（右下） */}
-          <button onClick={() => toggleIsWant(item.itemId, item.isWant)}
-                  style={{ position: "absolute", bottom: 10, right: 14, background: "none",
-                           border: "none", cursor: "pointer", fontSize: 26 }}>
-            {item.isWant ? "❤️" : "🤍"}
-          </button>
+          <div style={{ position: "absolute", bottom: 8, right: 12,
+                        display: "flex", flexDirection: "column", alignItems: "center", gap: 1 }}>
+            <button onClick={() => toggleIsWant(item.itemId, item.isWant)}
+                    style={{ background: "none", border: "none", cursor: "pointer", fontSize: 26, lineHeight: 1 }}>
+              {item.isWant ? "❤️" : "🤍"}
+            </button>
+            <span style={{ fontSize: 9, color: "rgba(255,255,255,0.85)",
+                           textShadow: "0 1px 3px rgba(0,0,0,0.6)", fontFamily: "var(--font-sans)" }}>
+              お気に入り
+            </span>
+          </div>
         </div>
       ) : (
         /* 写真なし：通常ヘッダー（戻るボタンのみ） */
@@ -254,6 +270,7 @@ export const ItemDetailPage = () => {
                 <path d="M9 2l2 2L4 11H2V9L9 2Z" stroke="var(--color-text-soft)"
                       strokeWidth="1.3" strokeLinejoin="round"/>
               </svg>
+              <span style={{ fontSize: 11, color: "var(--color-text-soft)", flexShrink: 0 }}>編集</span>
             </button>
           )}
         </div>
@@ -271,8 +288,12 @@ export const ItemDetailPage = () => {
           {!hasPhoto && (
             <button onClick={() => toggleIsWant(item.itemId, item.isWant)}
                     style={{ marginLeft: "auto", background: "none", border: "none",
-                             cursor: "pointer", fontSize: 22, lineHeight: 1 }}>
-              {item.isWant ? "❤️" : "🤍"}
+                             cursor: "pointer", display: "flex", flexDirection: "column",
+                             alignItems: "center", gap: 1 }}>
+              <span style={{ fontSize: 22, lineHeight: 1 }}>{item.isWant ? "❤️" : "🤍"}</span>
+              <span style={{ fontSize: 9, color: "var(--color-text-soft)", fontFamily: "var(--font-sans)" }}>
+                お気に入り
+              </span>
             </button>
           )}
         </div>
@@ -280,26 +301,41 @@ export const ItemDetailPage = () => {
         {/* Google マップ（全カテゴリ対象） */}
         <div className="card p-4 mb-4">
           {/* マップで見るリンク: Maps対象カテゴリ or URL登録済みの場合に表示 */}
-          {(isPlaceCategory || item.userPlaceUrl) && (
-            <a
-              href={item.userPlaceUrl ?? mapsSearchUrl(item.title)}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 12,
-                       marginBottom: 12 }}
-            >
-              <span style={{ fontSize: 20, flexShrink: 0 }}>🗺️</span>
-              <span style={{ flex: 1, fontSize: 14, fontWeight: 600,
-                             color: "var(--color-primary)" }}>
-                Google マップで見る
-              </span>
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0 }}>
-                <path d="M3 11L11 3M11 3H6M11 3V8" stroke="var(--color-primary)"
-                      strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </a>
+          {/* Google マップで見る + URL編集ボタン（横並び） */}
+          {!editingUrl && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+              {(isPlaceCategory || item.userPlaceUrl) ? (
+                <a
+                  href={item.userPlaceUrl ?? mapsSearchUrl(item.title)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ textDecoration: "none", flex: 1, display: "flex", alignItems: "center", gap: 12 }}
+                >
+                  <span style={{ fontSize: 20, flexShrink: 0 }}>🗺️</span>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: "var(--color-primary)" }}>
+                    Googleマップで見る
+                  </span>
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0, marginLeft: 4 }}>
+                    <path d="M3 11L11 3M11 3H6M11 3V8" stroke="var(--color-primary)"
+                          strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </a>
+              ) : (
+                <span style={{ flex: 1 }} />
+              )}
+              <button
+                onClick={() => { setUrlDraft(item.userPlaceUrl ?? ""); setEditingUrl(true); }}
+                style={{ fontSize: 12, color: item.userPlaceUrl ? "var(--color-primary)" : "var(--color-text-soft)",
+                         background: "none", border: "none", cursor: "pointer", padding: 0,
+                         display: "flex", alignItems: "center", gap: 3, flexShrink: 0 }}>
+                <svg width="12" height="12" viewBox="0 0 13 13" fill="none">
+                  <path d="M8.5 1.5l3 3L4 12H1v-3L8.5 1.5z" stroke="currentColor"
+                        strokeWidth="1.3" strokeLinejoin="round"/>
+                </svg>
+                {item.userPlaceUrl ? "編集" : "URLを登録"}
+              </button>
+            </div>
           )}
-          {/* 場所URLの入力（全カテゴリ） */}
           {editingUrl ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <p style={{ fontSize: 11, color: "var(--color-text-soft)" }}>
@@ -315,7 +351,7 @@ export const ItemDetailPage = () => {
                          padding: "8px 10px", background: "var(--color-bg)",
                          outline: "none", fontFamily: "var(--font-sans)" }}
               />
-              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <div style={{ display: "flex", gap: 20, justifyContent: "flex-end" }}>
                 <button onClick={() => setEditingUrl(false)}
                         style={{ fontSize: 12, color: "var(--color-text-soft)", background: "none",
                                  border: "none", cursor: "pointer" }}>
@@ -328,19 +364,7 @@ export const ItemDetailPage = () => {
                 </button>
               </div>
             </div>
-          ) : (
-            <button
-              onClick={() => { setUrlDraft(item.userPlaceUrl ?? ""); setEditingUrl(true); }}
-              style={{ fontSize: 12, color: item.userPlaceUrl ? "var(--color-primary)" : "var(--color-text-soft)",
-                       background: "none", border: "none", cursor: "pointer", padding: 0,
-                       display: "flex", alignItems: "center", gap: 4 }}>
-              <svg width="12" height="12" viewBox="0 0 13 13" fill="none">
-                <path d="M8.5 1.5l3 3L4 12H1v-3L8.5 1.5z" stroke="currentColor"
-                      strokeWidth="1.3" strokeLinejoin="round"/>
-              </svg>
-              {item.userPlaceUrl ? "場所URLを変更" : "場所URLを登録"}
-            </button>
-          )}
+          ) : null}
         </div>
 
         {/* 完了チェック */}
@@ -357,13 +381,17 @@ export const ItemDetailPage = () => {
                     const yyyy = d.getFullYear();
                     const mm = String(d.getMonth() + 1).padStart(2, "0");
                     const dd = String(d.getDate()).padStart(2, "0");
-                    setCompletedAtDraft(`${yyyy}-${mm}-${dd}`);
+                    setCompletedAtDate(`${yyyy}-${mm}-${dd}`);
+                    setCompletedAtHour(d.getHours());
                     setEditingCompletedAt(true);
                   }}
                   style={{ background: "none", border: "none", padding: 0, cursor: "pointer",
                            display: "flex", alignItems: "center", gap: 4, marginTop: 2 }}>
-                  <span className="text-xs" style={{ color: "var(--color-text-soft)" }}>
-                    {(item.completedAt as { toDate: () => Date }).toDate().toLocaleDateString("ja-JP")}
+                  <span className="text-sm" style={{ color: "var(--color-text-soft)" }}>
+                    {(() => {
+                      const d = (item.completedAt as { toDate: () => Date }).toDate();
+                      return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")} ${d.getHours()}時`;
+                    })()}
                   </span>
                   <svg width="10" height="10" viewBox="0 0 13 13" fill="none">
                     <path d="M8.5 1.5l3 3L4 12H1v-3L8.5 1.5z" stroke="var(--color-text-soft)"
@@ -372,15 +400,25 @@ export const ItemDetailPage = () => {
                 </button>
               )}
               {isDone && editingCompletedAt && (
-                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
                   <input
                     type="date"
-                    value={completedAtDraft}
-                    onChange={(e) => setCompletedAtDraft(e.target.value)}
+                    value={completedAtDate}
+                    onChange={(e) => setCompletedAtDate(e.target.value)}
                     style={{ fontSize: 12, border: "1px solid var(--color-border)", borderRadius: 6,
                              padding: "3px 6px", background: "var(--color-bg)",
                              color: "var(--color-text-main)", fontFamily: "var(--font-sans)" }}
                   />
+                  <select
+                    value={completedAtHour}
+                    onChange={(e) => setCompletedAtHour(Number(e.target.value))}
+                    style={{ fontSize: 12, border: "1px solid var(--color-border)", borderRadius: 6,
+                             padding: "3px 6px", background: "var(--color-bg)",
+                             color: "var(--color-text-main)", fontFamily: "var(--font-sans)" }}>
+                    {Array.from({ length: 24 }, (_, h) => (
+                      <option key={h} value={h}>{h}時</option>
+                    ))}
+                  </select>
                   <button onClick={handleSaveCompletedAt}
                           style={{ fontSize: 11, fontWeight: 600, color: "var(--color-primary)",
                                    background: "none", border: "none", cursor: "pointer" }}>
@@ -405,6 +443,11 @@ export const ItemDetailPage = () => {
               {isDone ? "取り消す" : "完了にする"}
             </button>
           </div>
+          {!isDone && (
+            <p style={{ fontSize: 11, color: "var(--color-text-soft)", marginTop: 6, textAlign: "right" }}>
+              完了にすると、思い出に記録されます ✨
+            </p>
+          )}
         </div>
 
         {/* 評価 */}
@@ -426,7 +469,7 @@ export const ItemDetailPage = () => {
         {/* メモ */}
         <div className="card p-4 mb-4">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-sm font-bold" style={{ color: "var(--color-text-main)" }}>メモ</p>
+            <p className="text-sm font-bold" style={{ color: "var(--color-text-main)" }}>メモ・日記</p>
             <span className="text-xs" style={{ color: "var(--color-text-soft)" }}>
               {memo.length} / 100
             </span>

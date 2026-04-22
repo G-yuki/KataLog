@@ -125,7 +125,7 @@ export const MemoryPage = () => {
                        display: "flex", alignItems: "center" }}>
         <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 16, fontWeight: 600,
                      color: "var(--color-text-main)", letterSpacing: "0.01em" }}>
-          MEMORY: 思い出
+          思い出
         </h1>
         <img src="/logo.png" alt="KataLog" style={{ marginLeft: "auto", height: 18, objectFit: "contain" }} />
       </header>

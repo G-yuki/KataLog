@@ -15,8 +15,9 @@ import {
 import { generateInviteUrl, getInviteParams, clearInviteParams } from "../../../lib/token";
 import { db } from "../../../firebase/firestore";
 import { doc, getDocFromServer, setDoc, onSnapshot } from "firebase/firestore";
+import { QuickGuide } from "../../setup/components/QuickGuide";
 
-type Step = "loading" | "nickname" | "pair";
+type Step = "loading" | "nickname" | "guide" | "pair";
 
 export const PairSetupPage = () => {
   const { user } = useAuth();
@@ -34,6 +35,7 @@ export const PairSetupPage = () => {
   const [pairError, setPairError] = useState<string | null>(null);
   const [pairLoading, setPairLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [waitingForPartner, setWaitingForPartner] = useState(false);
 
   // 初期化：displayName・pairId の確認 + 招待URL自動参加
   useEffect(() => {
@@ -100,20 +102,37 @@ export const PairSetupPage = () => {
 
       // 招待URLあり + displayName未設定 → ニックネーム設定後に参加（handleNicknameSave内で処理）
       setStep(name ? "pair" : "nickname");
-    })();
+    })().catch(() => {
+      setStep("nickname");
+    });
   }, [user, navigate]);
 
   // pairId が確定したらペアドキュメントを監視し、メンバーが2名になったら自動遷移
   useEffect(() => {
     if (!pairId) return;
-    const unsubscribe = onSnapshot(doc(db, "pairs", pairId), (snap) => {
+    const pairRef = doc(db, "pairs", pairId);
+    const checkAndNavigate = async () => {
+      const snap = await getDocFromServer(pairRef);
       if (!snap.exists()) return;
       const members = snap.data().members as string[];
-      if (members.length >= 2) {
-        navigate("/setup", { replace: true });
-      }
+      if (members.length >= 2) navigate("/setup", { replace: true });
+    };
+    const unsubscribe = onSnapshot(pairRef, (snap) => {
+      if (!snap.exists()) return;
+      const members = snap.data().members as string[];
+      if (members.length >= 2) navigate("/setup", { replace: true });
     });
-    return () => unsubscribe();
+    // iOSバックグラウンド復帰対策
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") checkAndNavigate();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    const interval = setInterval(checkAndNavigate, 5000);
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
   }, [pairId, navigate]);
 
   // 招待URLでアクセスした場合は nickname 設定後に自動参加
@@ -148,7 +167,7 @@ export const PairSetupPage = () => {
     }
 
     setNicknameSaving(false);
-    setStep("pair");
+    setStep("guide");
   };
 
   // ペア作成
@@ -178,15 +197,30 @@ export const PairSetupPage = () => {
     setCopied(false);
   };
 
-  // クリップボードコピー
+  // 招待リンク共有（Web Share API → クリップボードフォールバック）
   const handleCopy = async () => {
     if (!inviteUrl) return;
-    await navigator.clipboard.writeText(inviteUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: "KataLog - ふたりの体験リスト",
+          text: "KataLogに招待します。リンクから参加してください。",
+          url: inviteUrl,
+        });
+        setWaitingForPartner(true);
+      } catch {
+        // ユーザーがキャンセルした場合は何もしない
+      }
+    } else {
+      await navigator.clipboard.writeText(inviteUrl);
+      setCopied(true);
+      setWaitingForPartner(true);
+    }
   };
 
   if (step === "loading") return <Loading />;
+
+  if (step === "guide") return <QuickGuide onComplete={() => setStep("pair")} />;
 
   // ── ニックネーム設定 ──────────────────────────────
   if (step === "nickname") {
@@ -228,6 +262,36 @@ export const PairSetupPage = () => {
     );
   }
 
+  // ── パートナー待機画面 ────────────────────────────
+  if (waitingForPartner && pairId) return (
+    <div className="flex flex-col items-center justify-center min-h-screen px-6 gap-6 text-center"
+         style={{ background: "var(--color-bg)", fontFamily: "var(--font-sans)" }}>
+      <p style={{ fontSize: 72, lineHeight: 1 }}>✉️</p>
+      <h2 style={{ fontFamily: "var(--font-serif)", fontSize: 22, fontWeight: 600,
+                   color: "var(--color-text-main)", lineHeight: 1.4 }}>
+        パートナーの参加を<br />お待ちください
+      </h2>
+      <p style={{ fontSize: 14, color: "var(--color-text-mid)", lineHeight: 1.8, maxWidth: 280 }}>
+        招待リンクを送ったら、パートナーが参加するまでしばらくお待ちください。<br />
+        参加すると自動で次のステップへ進みます。
+      </p>
+      <div className="flex gap-2">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="w-2.5 h-2.5 rounded-full animate-bounce"
+               style={{ background: "var(--color-primary)", animationDelay: `${i * 0.2}s` }} />
+        ))}
+      </div>
+      <button
+        onClick={() => setWaitingForPartner(false)}
+        style={{ marginTop: 8, fontSize: 13, color: "var(--color-text-soft)",
+                 background: "none", border: "none", cursor: "pointer",
+                 textDecoration: "underline", fontFamily: "var(--font-sans)" }}
+      >
+        招待リンクを確認する
+      </button>
+    </div>
+  );
+
   // ── ペア作成・参加 ────────────────────────────────
   return (
     <div className="flex flex-col items-center justify-center min-h-screen px-6 gap-4">
@@ -267,7 +331,7 @@ export const PairSetupPage = () => {
               {inviteUrl}
             </p>
             <button className="btn-primary" onClick={handleCopy}>
-              {copied ? "✅ コピーしました" : "リンクをコピー"}
+              {copied ? "✅ コピーしました" : "招待リンクを共有する"}
             </button>
             <button className="btn-ghost text-xs" onClick={handleReissue}>
               リンクを再発行する
