@@ -44,9 +44,7 @@ export const HomePage = () => {
   const [showGuide, setShowGuide] = useState(() => !localStorage.getItem("homeGuideSeen"));
   const [guideDetailOpen, setGuideDetailOpen] = useState(false);
 
-  const cycleSort = () => {
-    const idx = SORTS.findIndex((s) => s.value === sort);
-    const next = SORTS[(idx + 1) % SORTS.length].value;
+  const handleSortChange = (next: Sort) => {
     setSort(next);
     if (next === "distance" && !userLoc) {
       navigator.geolocation.getCurrentPosition(
@@ -254,16 +252,24 @@ export const HomePage = () => {
             </button>
           ))}
         </div>
-        {/* 並び替えボタン */}
-        <button onClick={cycleSort}
-                style={{ flexShrink: 0, padding: "0 14px 0 10px", height: "100%",
-                         background: "none", border: "none", borderLeft: "1px solid rgba(0,0,0,0.1)",
-                         cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
-          <span style={{ fontSize: 13 }}>{SORTS.find((s) => s.value === sort)?.icon}</span>
-          <span style={{ fontSize: 10, color: "var(--color-text-mid)", fontFamily: "var(--font-sans)" }}>
-            {SORTS.find((s) => s.value === sort)?.label}
-          </span>
-        </button>
+        {/* 並び替えプルダウン */}
+        <div style={{ flexShrink: 0, borderLeft: "1px solid rgba(0,0,0,0.1)",
+                      padding: "0 10px", display: "flex", alignItems: "center" }}>
+          <select
+            value={sort}
+            onChange={(e) => handleSortChange(e.target.value as Sort)}
+            style={{ fontSize: 11, color: "var(--color-text-mid)", fontFamily: "var(--font-sans)",
+                     background: "transparent", border: "none", outline: "none",
+                     cursor: "pointer", appearance: "none", WebkitAppearance: "none",
+                     paddingRight: 14, backgroundImage:
+                       "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23888' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E\")",
+                     backgroundRepeat: "no-repeat", backgroundPosition: "right 0px center",
+                     backgroundSize: "10px 6px" }}>
+            {SORTS.map((s) => (
+              <option key={s.value} value={s.value}>{s.icon} {s.label}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* ── 検索窓 ── */}
@@ -407,9 +413,10 @@ export const HomePage = () => {
               onClick={() => setShowAddModal(true)}
               style={{ position: "fixed", bottom: 88, right: 20, zIndex: 30,
                        width: 52, height: 52, borderRadius: "50%",
-                       background: "var(--color-primary)", color: "#fff", border: "none",
+                       background: "#fff", color: "var(--color-primary)",
+                       border: "2px solid var(--color-primary)",
                        fontSize: 26, cursor: "pointer",
-                       boxShadow: "0 4px 16px rgba(30,45,90,0.35)",
+                       boxShadow: "0 4px 16px rgba(0,0,0,0.18)",
                        display: "flex", alignItems: "center", justifyContent: "center" }}>
         +
       </button>
