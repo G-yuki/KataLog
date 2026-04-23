@@ -5,6 +5,7 @@ import { Loading } from "../../../components/Loading";
 import { BottomNav } from "../../../components/BottomNav";
 import { useGenerateItems } from "../../setup/hooks/useGenerateItems";
 import { addSuggestedItems } from "../../items/services/itemService";
+import { useItems } from "../../items/hooks/useItems";
 import { usePair } from "../../../contexts/PairContext";
 import { db } from "../../../firebase/firestore";
 import { doc, getDoc, updateDoc, deleteField, serverTimestamp } from "firebase/firestore";
@@ -51,6 +52,7 @@ export const SuggestPage = () => {
   const [genError, setGenError] = useState<string | null>(null);
 
   const { pairId, loading: pairLoading } = usePair();
+  const { items: existingItems } = useItems(pairId);
   const [step, setStep] = useState<Step>("home");
   const [showIntro, setShowIntro] = useState(() => !localStorage.getItem("askAiIntroSeen"));
   const [hearing, setHearing] = useState<Hearing | null>(null);
@@ -81,7 +83,8 @@ export const SuggestPage = () => {
     if (!base) return;
     setGenError(null);
     setStep("generating");
-    const items = await generate(base as Hearing);
+    const existingTitles = existingItems.map((i) => i.title);
+    const items = await generate(base as Hearing, existingTitles);
     if (items) {
       setSuggestions(items);
       setSelected(new Set());

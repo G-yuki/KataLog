@@ -149,7 +149,9 @@ export const MemoryPage = () => {
         todoItems: todoItems.map((i) => ({ title: i.title, category: i.category })),
         period: getAiLabel(startMonth, endMonth),
       });
-      setMemory(result.data.memory);
+      // AI が絵文字プレースホルダーをそのまま出力した場合のフォールバック
+      const raw = result.data.memory.replace(/\[体験に合う絵文字\]/g, "📍");
+      setMemory(raw);
     } catch {
       setGenError("生成に失敗しました。もう一度お試しください。");
     } finally {

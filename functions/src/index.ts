@@ -21,6 +21,7 @@ export const generateItems = onCall(
   }
 
   const hearing = request.data?.hearing;
+  const existingTitles: string[] = request.data?.existingTitles ?? [];
   if (!hearing) {
     throw new HttpsError("invalid-argument", "ヒアリングデータが不足しています。");
   }
@@ -113,7 +114,11 @@ ${hearing.freetext ? `- 自由入力（最優先で反映すること）：${hea
 - type: outdoor=外出・移動が必要、indoor=自宅・室内で完結
 - difficulty: easy=気軽にできる、special=少し特別・準備が必要
 - 50件すべて異なる体験にすること
-- ヒアリングの好みを反映した具体的なタイトルにすること`;
+- ヒアリングの好みを反映した具体的なタイトルにすること${
+  existingTitles.length > 0
+    ? `\n\n【除外リスト（既にリストに存在するため提案しないこと）】\n${existingTitles.map((t) => `- ${t}`).join("\n")}`
+    : ""
+}`;
 
   const responseSchema: Schema = {
     type: SchemaType.ARRAY,

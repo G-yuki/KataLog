@@ -8,15 +8,15 @@ export const useGenerateItems = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const generate = async (hearing: Hearing): Promise<ItemDraft[] | null> => {
+  const generate = async (hearing: Hearing, existingTitles?: string[]): Promise<ItemDraft[] | null> => {
     setLoading(true);
     setError(null);
     try {
-      const fn = httpsCallable<{ hearing: Hearing }, { items: ItemDraft[] }>(
+      const fn = httpsCallable<{ hearing: Hearing; existingTitles?: string[] }, { items: ItemDraft[] }>(
         functions,
         "generateItems"
       );
-      const result = await fn({ hearing });
+      const result = await fn({ hearing, existingTitles });
       return result.data.items;
     } catch (e) {
       const msg = (e as { message?: string })?.message ?? "リストの生成に失敗しました。もう一度お試しください。";
