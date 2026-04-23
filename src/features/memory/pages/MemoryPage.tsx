@@ -191,7 +191,7 @@ export const MemoryPage = () => {
         {(() => {
           const currentYear = new Date().getFullYear();
           const minYear = allDoneItems.length > 0
-            ? Math.min(currentYear, ...allDoneItems.map((i) => (i.completedAt as Timestamp).toDate().getFullYear()))
+            ? Math.min(currentYear - 2, ...allDoneItems.map((i) => (i.completedAt as Timestamp).toDate().getFullYear()))
             : currentYear - 2;
           const yearOptions = Array.from({ length: currentYear - minYear + 1 }, (_, k) => currentYear - k).reverse();
           const [sY, sM] = startMonth.split("-").map(Number);
