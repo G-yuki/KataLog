@@ -1,5 +1,5 @@
 // src/features/memory/pages/MemoryPage.tsx
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Fragment } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loading } from "../../../components/Loading";
 import { BottomNav } from "../../../components/BottomNav";
@@ -185,32 +185,46 @@ export const MemoryPage = () => {
 
       <div style={{ flex: 1, overflowY: "auto", scrollbarWidth: "none", paddingBottom: 80 }}>
 
-        {/* 期間選択（開始月〜終了月） */}
-        <div style={{ position: "sticky", top: 0, zIndex: 15, padding: "8px 16px",
-                      background: "var(--color-bg)", borderBottom: "1px solid rgba(0,0,0,0.05)",
-                      display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 11, color: "var(--color-text-soft)", flexShrink: 0 }}>期間</span>
-          <input
-            type="month"
-            value={startMonth}
-            max={endMonth}
-            onChange={(e) => handleSetStart(e.target.value)}
-            style={{ flex: 1, fontSize: 12, border: "1px solid var(--color-border)",
-                     borderRadius: 8, padding: "4px 8px", background: "var(--color-bg)",
-                     color: "var(--color-text-main)", fontFamily: "var(--font-sans)", outline: "none" }}
-          />
-          <span style={{ fontSize: 12, color: "var(--color-text-soft)", flexShrink: 0 }}>〜</span>
-          <input
-            type="month"
-            value={endMonth}
-            min={startMonth}
-            max={todayYM()}
-            onChange={(e) => handleSetEnd(e.target.value)}
-            style={{ flex: 1, fontSize: 12, border: "1px solid var(--color-border)",
-                     borderRadius: 8, padding: "4px 8px", background: "var(--color-bg)",
-                     color: "var(--color-text-main)", fontFamily: "var(--font-sans)", outline: "none" }}
-          />
-        </div>
+        {/* 期間選択（年・月セレクト） */}
+        {(() => {
+          const currentYear = new Date().getFullYear();
+          const minYear = allDoneItems.length > 0
+            ? Math.min(currentYear, ...allDoneItems.map((i) => (i.completedAt as Timestamp).toDate().getFullYear()))
+            : currentYear - 2;
+          const yearOptions = Array.from({ length: currentYear - minYear + 1 }, (_, k) => currentYear - k).reverse();
+          const [sY, sM] = startMonth.split("-").map(Number);
+          const [eY, eM] = endMonth.split("-").map(Number);
+          const selStyle = {
+            fontSize: 12, border: "1px solid var(--color-border)",
+            borderRadius: 8, padding: "4px 6px", background: "var(--color-bg)",
+            color: "var(--color-text-main)", fontFamily: "var(--font-sans)", outline: "none",
+          } as const;
+          const mkYM = (y: number, m: number) => `${y}-${String(m).padStart(2, "0")}`;
+          return (
+            <div style={{ position: "sticky", top: 0, zIndex: 15, padding: "8px 16px",
+                          background: "var(--color-bg)", borderBottom: "1px solid rgba(0,0,0,0.05)",
+                          display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 11, color: "var(--color-text-soft)", flexShrink: 0 }}>期間</span>
+              <select value={sY} onChange={(e) => handleSetStart(mkYM(Number(e.target.value), sM))} style={selStyle}>
+                {yearOptions.map((y) => <option key={y} value={y}>{y}年</option>)}
+              </select>
+              <select value={sM} onChange={(e) => handleSetStart(mkYM(sY, Number(e.target.value)))} style={selStyle}>
+                {Array.from({ length: 12 }, (_, k) => k + 1).map((m) => (
+                  <option key={m} value={m}>{m}月</option>
+                ))}
+              </select>
+              <span style={{ fontSize: 12, color: "var(--color-text-soft)", flexShrink: 0 }}>〜</span>
+              <select value={eY} onChange={(e) => handleSetEnd(mkYM(Number(e.target.value), eM))} style={selStyle}>
+                {yearOptions.map((y) => <option key={y} value={y}>{y}年</option>)}
+              </select>
+              <select value={eM} onChange={(e) => handleSetEnd(mkYM(eY, Number(e.target.value)))} style={selStyle}>
+                {Array.from({ length: 12 }, (_, k) => k + 1).map((m) => (
+                  <option key={m} value={m}>{m}月</option>
+                ))}
+              </select>
+            </div>
+          );
+        })()}
 
         {allDoneItems.length === 0 ? (
           <div style={{ padding: "60px 32px", textAlign: "center" }}>
@@ -266,7 +280,7 @@ export const MemoryPage = () => {
               </div>
             ) : (
               <>
-                {/* 体験記録（月タイムライン） */}
+                {/* 体験記録（月セクション） */}
                 <div>
                   <p style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-soft)",
                               letterSpacing: "0.08em", marginBottom: 10 }}>
@@ -283,27 +297,19 @@ export const MemoryPage = () => {
                       const s = CATEGORY_STYLE[item.category] ?? CATEGORY_STYLE["その他"];
 
                       return (
-                        <div key={item.itemId} style={{ display: "flex", alignItems: "stretch", gap: 8 }}>
-                          {/* 左: タイムライン列（月ラベル＋縦線） */}
-                          <div style={{ width: 30, flexShrink: 0, display: "flex",
-                                        flexDirection: "column", alignItems: "center" }}>
-                            {showMonth && (
-                              <span style={{ fontSize: 9, fontWeight: 700,
-                                             color: "var(--color-secondary)",
-                                             letterSpacing: "0.04em", lineHeight: 1.3,
-                                             textAlign: "center", whiteSpace: "nowrap",
-                                             paddingTop: 2, paddingBottom: 2 }}>
-                                {fmtMonthYear(d, multiYear)}
-                              </span>
-                            )}
-                            {/* 縦線: 全アイテムに表示 */}
-                            <div style={{ width: 1, flex: 1, minHeight: 16,
-                                          background: "rgba(0,0,0,0.12)" }} />
-                          </div>
-                          {/* 右: アイテムカード */}
+                        <Fragment key={item.itemId}>
+                          {showMonth && (
+                            <p style={{ fontSize: 12, fontWeight: 600,
+                                        color: "var(--color-text-mid)",
+                                        letterSpacing: "0.08em",
+                                        fontFamily: "var(--font-sans)",
+                                        paddingTop: idx === 0 ? 0 : 8 }}>
+                              {fmtMonthYear(d, multiYear)}
+                            </p>
+                          )}
                           <button
                             onClick={() => navigate(`/home/${item.itemId}`, { state: { from: "/memory" } })}
-                            style={{ flex: 1, display: "flex", alignItems: "center", gap: 12,
+                            style={{ display: "flex", alignItems: "center", gap: 12, width: "100%",
                                      background: "#fff", borderRadius: 10, textAlign: "left",
                                      border: "1px solid rgba(0,0,0,0.06)", padding: "10px 14px",
                                      cursor: "pointer" }}>
@@ -330,7 +336,7 @@ export const MemoryPage = () => {
                               </p>
                             )}
                           </button>
-                        </div>
+                        </Fragment>
                       );
                     })}
                   </div>
