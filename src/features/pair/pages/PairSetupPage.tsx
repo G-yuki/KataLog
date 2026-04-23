@@ -225,37 +225,50 @@ export const PairSetupPage = () => {
   // ── ニックネーム設定 ──────────────────────────────
   if (step === "nickname") {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen px-6 gap-4">
-        <p className="text-4xl mb-2">👤</p>
-        <h2 className="text-xl font-bold text-center"
-            style={{ color: "var(--color-text-main)" }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center",
+                    justifyContent: "center", minHeight: "100dvh", padding: "0 40px",
+                    background: "var(--color-bg)", fontFamily: "var(--font-sans)" }}>
+
+        <img src="/logo.png" alt="KataLog"
+             style={{ height: 28, marginBottom: 40, opacity: 0.75 }} />
+
+        <h2 style={{ fontFamily: "var(--font-serif)", fontSize: 22, fontWeight: 600,
+                     color: "var(--color-text-main)", marginBottom: 8, textAlign: "center" }}>
           ニックネームを設定
         </h2>
-        <p className="text-sm text-center leading-relaxed"
-           style={{ color: "var(--color-text-mid)" }}>
-          アプリ内での表示名を入力してください。<br />
+        <p style={{ fontSize: 13, color: "var(--color-text-mid)", textAlign: "center",
+                    lineHeight: 1.8, marginBottom: 32 }}>
+          アプリ内での表示名を入力してください。
         </p>
 
         <input
           type="text"
-          className="w-full max-w-xs border-2 rounded-2xl px-4 py-3 text-base font-medium outline-none transition-colors"
-          style={{ borderColor: "var(--color-border)", color: "var(--color-text-main)" }}
-          placeholder=""
+          style={{ width: "100%", maxWidth: 260, fontSize: 18, fontWeight: 500,
+                   textAlign: "center", border: "none",
+                   borderBottom: "2px solid var(--color-primary)",
+                   background: "transparent", color: "var(--color-text-main)",
+                   padding: "8px 0", outline: "none", fontFamily: "var(--font-sans)" }}
           maxLength={10}
           value={nickname}
           onChange={(e) => setNickname(e.target.value)}
-          onFocus={(e) => { e.target.style.borderColor = "var(--color-primary)"; }}
-          onBlur={(e) => { e.target.style.borderColor = "var(--color-border)"; }}
+          onKeyDown={(e) => { if (e.key === "Enter" && nickname.trim()) handleNicknameSave(); }}
           autoFocus
         />
         {nicknameError && (
-          <p className="text-sm text-red-500 text-center">{nicknameError}</p>
+          <p style={{ fontSize: 12, color: "#e03030", marginTop: 10, textAlign: "center" }}>
+            {nicknameError}
+          </p>
         )}
+
         <button
-          className="btn-primary max-w-xs"
           onClick={handleNicknameSave}
           disabled={!nickname.trim() || nicknameSaving}
-        >
+          style={{ marginTop: 32, width: "100%", maxWidth: 260, padding: "15px",
+                   background: !nickname.trim() || nicknameSaving
+                     ? "var(--color-border)" : "var(--color-primary)",
+                   color: "#fff", border: "none", borderRadius: 14, fontSize: 15,
+                   fontWeight: 600, cursor: !nickname.trim() || nicknameSaving ? "default" : "pointer",
+                   fontFamily: "var(--font-sans)", transition: "background 0.2s" }}>
           {nicknameSaving ? "保存中..." : "決定する"}
         </button>
       </div>
