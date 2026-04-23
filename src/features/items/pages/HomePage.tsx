@@ -14,12 +14,6 @@ import { addManualItem } from "../services/itemService";
 import type { Item, Category, ItemType, ItemStatus } from "../../../types";
 
 type Filter = "all" | Category;
-type Sort = "added" | "alpha" | "distance";
-const SORTS: { value: Sort; label: string; icon: string }[] = [
-  { value: "added",    label: "追加順", icon: "↕" },
-  { value: "alpha",    label: "五十音", icon: "あ" },
-  { value: "distance", label: "距離",   icon: "📍" },
-];
 
 const CATEGORIES: Category[] = ["おでかけ", "映画", "食事", "本", "ゲーム", "音楽", "スポーツ", "その他"];
 const MAPS_KEY = import.meta.env.VITE_MAPS_BROWSER_KEY as string;
@@ -37,37 +31,11 @@ export const HomePage = () => {
   const { items, loading, setStatus, toggleIsWant, removeItem } = useItems(pairId);
 
   const [filter, setFilter] = useState<Filter>("all");
-  const [sort, setSort] = useState<Sort>("added");
   const [search, setSearch] = useState("");
-  const [userLoc, setUserLoc] = useState<{ lat: number; lng: number } | null>(null);
   const [doneOpen, setDoneOpen] = useState(false);
   const [showGuide, setShowGuide] = useState(() => !localStorage.getItem("homeGuideSeen"));
   const [guideDetailOpen, setGuideDetailOpen] = useState(false);
 
-  const handleSortChange = (next: Sort) => {
-    setSort(next);
-    if (next === "distance" && !userLoc) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => setUserLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-        () => {}
-      );
-    }
-  };
-
-  const sortItems = (arr: Item[]): Item[] => {
-    const s = [...arr];
-    if (sort === "alpha") return s.sort((a, b) => a.title.localeCompare(b.title, "ja"));
-    if (sort === "distance" && userLoc) {
-      return s.sort((a, b) => {
-        const da = a.lat != null && a.lng != null
-          ? Math.hypot(a.lat - userLoc.lat, a.lng - userLoc.lng) : Infinity;
-        const db = b.lat != null && b.lng != null
-          ? Math.hypot(b.lat - userLoc.lat, b.lng - userLoc.lng) : Infinity;
-        return da - db;
-      });
-    }
-    return s.sort((a, b) => (a.createdAt?.toMillis() ?? 0) - (b.createdAt?.toMillis() ?? 0));
-  };
 
   const applySearch = (arr: Item[]): Item[] => {
     const q = search.trim().toLowerCase();
@@ -179,10 +147,10 @@ export const HomePage = () => {
   const goodItems   = activeItems.filter((i) => !i.isWant && (i.matchTier ?? "good") !== "try");
   const tryItems    = activeItems.filter((i) => !i.isWant && i.matchTier === "try");
 
-  const sortedGoItems   = applySearch(sortItems(goItems));
+  const sortedGoItems   = applySearch(goItems);
   const sortedGoodBase  = filter === "all" ? goodItems : goodItems.filter((i) => i.category === filter);
-  const filteredGood    = applySearch(sortItems(sortedGoodBase));
-  const filteredTry     = applySearch(sortItems(tryItems));
+  const filteredGood    = applySearch(sortedGoodBase);
+  const filteredTry     = applySearch(tryItems);
 
   const progress = items.length > 0 ? doneItems.length / items.length : 0;
 
@@ -251,24 +219,6 @@ export const HomePage = () => {
               {f === "all" ? "すべて" : f === "おでかけ" ? "外出" : f}
             </button>
           ))}
-        </div>
-        {/* 並び替えプルダウン */}
-        <div style={{ flexShrink: 0, borderLeft: "1px solid rgba(0,0,0,0.1)",
-                      padding: "0 10px", display: "flex", alignItems: "center" }}>
-          <select
-            value={sort}
-            onChange={(e) => handleSortChange(e.target.value as Sort)}
-            style={{ fontSize: 11, color: "var(--color-text-mid)", fontFamily: "var(--font-sans)",
-                     background: "transparent", border: "none", outline: "none",
-                     cursor: "pointer", appearance: "none", WebkitAppearance: "none",
-                     paddingRight: 14, backgroundImage:
-                       "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23888' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E\")",
-                     backgroundRepeat: "no-repeat", backgroundPosition: "right 0px center",
-                     backgroundSize: "10px 6px" }}>
-            {SORTS.map((s) => (
-              <option key={s.value} value={s.value}>{s.icon} {s.label}</option>
-            ))}
-          </select>
         </div>
       </div>
 
@@ -404,7 +354,7 @@ export const HomePage = () => {
           pointerEvents: "none", zIndex: 200,
           animation: "toastIn 0.2s ease",
         }}>
-          追加しました ✓
+          追加しました✅
         </div>
       )}
 
