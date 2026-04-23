@@ -125,6 +125,7 @@ export const HomePage = () => {
   });
   const [newCompletedHour, setNewCompletedHour] = useState(new Date().getHours());
   const [addSaving, setAddSaving] = useState(false);
+  const [addedToast, setAddedToast] = useState(false);
 
   const resetAddModal = () => {
     setNewTitle(""); setNewCategory("その他"); setNewType("indoor");
@@ -155,6 +156,8 @@ export const HomePage = () => {
     setAddSaving(false);
     setShowAddModal(false);
     resetAddModal();
+    setAddedToast(true);
+    setTimeout(() => setAddedToast(false), 2500);
   };
 
   useEffect(() => {
@@ -384,6 +387,20 @@ export const HomePage = () => {
 
       {/* ── ボトムナビ ── */}
       <BottomNav />
+
+      {/* ── 追加しましたトースト ── */}
+      {addedToast && (
+        <div style={{
+          position: "fixed", bottom: 96, left: "50%", transform: "translateX(-50%)",
+          background: "rgba(30,30,30,0.88)", color: "#fff",
+          borderRadius: 24, padding: "10px 22px",
+          fontSize: 13, fontWeight: 500, fontFamily: "var(--font-sans)",
+          pointerEvents: "none", zIndex: 200,
+          animation: "toastIn 0.2s ease",
+        }}>
+          追加しました ✓
+        </div>
+      )}
 
       {/* ── 追加FAB ── */}
       <button data-guide="add-btn"
