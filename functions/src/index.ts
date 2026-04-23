@@ -80,9 +80,12 @@ export const generateItems = onCall(
   const overseasNote = hearing.overseas
     ? `\n- 旅行先：${hearing.overseas}（海外旅行プラン）`
     : "";
+  const areaDisplay = hearing.range === "anywhere"
+    ? "全国"
+    : (hearing.prefecture || "未指定");
   const areaNote = hearing.overseas
     ? ""
-    : `- 活動エリア：${hearing.prefecture}（${rangeLabel[hearing.range] ?? hearing.range}）\n`;
+    : `- 活動エリア：${areaDisplay}（${rangeLabel[hearing.range] ?? hearing.range}）\n`;
 
   const prompt = `あなたはカップル・夫婦向けの体験提案AIです。
 以下のヒアリング結果をもとに、このカップルにぴったりな「やりたいこと」リストを50件生成してください。
@@ -354,11 +357,12 @@ export const enrichPairItems = onCall(
       throw new HttpsError("invalid-argument", "pairId が必要です。");
     }
 
-    // prefecture を取得
+    // prefecture を取得（全国選択時は付けない）
     const pairSnap = await admin.firestore().doc(`pairs/${pairId}`).get();
-    const prefecture = pairSnap.exists
-      ? (pairSnap.data()?.hearing?.prefecture as string | undefined)
-      : undefined;
+    const hearing = pairSnap.exists ? pairSnap.data()?.hearing : undefined;
+    const prefecture = hearing?.range === "anywhere"
+      ? undefined
+      : (hearing?.prefecture as string | undefined);
 
     // placeId === null かつ対象カテゴリのアイテムを全件取得
     const itemsSnap = await admin.firestore()
