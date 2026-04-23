@@ -119,11 +119,29 @@ export const HomePage = () => {
   const [newRating, setNewRating] = useState<number | null>(null);
   const [newMapsUrl, setNewMapsUrl] = useState("");
   const [newMemo, setNewMemo] = useState("");
+  const [newCompletedDate, setNewCompletedDate] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  });
+  const [newCompletedHour, setNewCompletedHour] = useState(new Date().getHours());
   const [addSaving, setAddSaving] = useState(false);
+
+  const resetAddModal = () => {
+    setNewTitle(""); setNewCategory("その他"); setNewType("indoor");
+    setNewStatus("todo"); setNewRating(null); setNewMapsUrl(""); setNewMemo("");
+    const d = new Date();
+    setNewCompletedDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
+    setNewCompletedHour(d.getHours());
+  };
 
   const handleAddItem = async () => {
     if (!pairId || !newTitle.trim()) return;
     setAddSaving(true);
+    let completedAtDate: Date | undefined;
+    if (newStatus === "done" && newCompletedDate) {
+      const [y, m, d] = newCompletedDate.split("-").map(Number);
+      completedAtDate = new Date(y, m - 1, d, newCompletedHour, 0, 0);
+    }
     await addManualItem(pairId, {
       title: newTitle.trim(),
       category: newCategory,
@@ -132,11 +150,11 @@ export const HomePage = () => {
       rating: newStatus === "done" ? newRating : null,
       memo: newMemo.trim() || null,
       userPlaceUrl: newMapsUrl.trim() || null,
+      completedAtDate,
     });
     setAddSaving(false);
     setShowAddModal(false);
-    setNewTitle(""); setNewCategory("その他"); setNewType("indoor");
-    setNewStatus("todo"); setNewRating(null); setNewMapsUrl(""); setNewMemo("");
+    resetAddModal();
   };
 
   useEffect(() => {
@@ -430,7 +448,7 @@ export const HomePage = () => {
                                    background: newCategory === cat ? "var(--color-text-main)" : "transparent",
                                    color: newCategory === cat ? "var(--color-bg)" : "#5C4A35",
                                    cursor: "pointer", fontFamily: "var(--font-sans)" }}>
-                    {CATEGORY_STYLE[cat]?.emoji} {cat}
+                    {CATEGORY_STYLE[cat]?.emoji} {cat === "おでかけ" ? "外出" : cat}
                   </button>
                 ))}
               </div>
@@ -469,6 +487,31 @@ export const HomePage = () => {
                 ))}
               </div>
             </div>
+
+            {/* 完了日時（完了時のみ） */}
+            {newStatus === "done" && (
+              <div>
+                <ModalLabel>完了日時</ModalLabel>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input type="date" value={newCompletedDate}
+                         onChange={(e) => setNewCompletedDate(e.target.value)}
+                         style={{ flex: 1, padding: "8px 10px", borderRadius: 8, fontSize: 13,
+                                  border: "1px solid var(--color-border)", outline: "none",
+                                  background: "var(--color-bg)", color: "var(--color-text-main)",
+                                  fontFamily: "var(--font-sans)" }} />
+                  <select value={newCompletedHour}
+                          onChange={(e) => setNewCompletedHour(Number(e.target.value))}
+                          style={{ padding: "8px 10px", borderRadius: 8, fontSize: 13,
+                                   border: "1px solid var(--color-border)", outline: "none",
+                                   background: "var(--color-bg)", color: "var(--color-text-main)",
+                                   fontFamily: "var(--font-sans)" }}>
+                    {Array.from({ length: 24 }, (_, h) => (
+                      <option key={h} value={h}>{h}時</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
 
             {/* 評価（完了時のみ有効） */}
             <div style={{ opacity: newStatus === "done" ? 1 : 0.35,

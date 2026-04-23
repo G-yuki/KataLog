@@ -135,6 +135,7 @@ export const addManualItem = async (
     rating: number | null;
     memo: string | null;
     userPlaceUrl: string | null;
+    completedAtDate?: Date;
   }
 ): Promise<void> => {
   const ref = doc(collection(db, "pairs", pairId, "items"));
@@ -148,12 +149,16 @@ export const addManualItem = async (
     matchTier: "good",
     rating: data.status === "done" ? data.rating : null,
     memo: data.memo,
-    completedAt: data.status === "done" ? serverTimestamp() : null,
+    completedAt: data.status === "done"
+      ? (data.completedAtDate ? Timestamp.fromDate(data.completedAtDate) : serverTimestamp())
+      : null,
     userPlaceUrl: data.userPlaceUrl,
     placeId: null,
     placeName: null,
     placeRating: null,
     placePhotoRef: null,
+    lat: null,
+    lng: null,
     createdAt: serverTimestamp(),
   });
 };
