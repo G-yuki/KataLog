@@ -176,11 +176,11 @@ export const MemoryPage = () => {
                        position: "sticky", top: 0, zIndex: 20,
                        background: "var(--color-bg)",
                        display: "flex", alignItems: "center" }}>
-        <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 16, fontWeight: 600,
+        <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 17, fontWeight: 600,
                      color: "var(--color-text-main)", letterSpacing: "0.01em" }}>
           かたログ
         </h1>
-        <img src="/logo.png" alt="KataLog" style={{ marginLeft: "auto", height: 18, objectFit: "contain" }} />
+        <img src="/logo.png" alt="KataLog" style={{ marginLeft: "auto", height: 20, objectFit: "contain" }} />
       </header>
 
       <div style={{ flex: 1, overflowY: "auto", scrollbarWidth: "none", paddingBottom: 80 }}>

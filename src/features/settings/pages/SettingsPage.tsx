@@ -117,7 +117,7 @@ export const SettingsPage = () => {
                      letterSpacing: "0.01em" }}>
           設定
         </h1>
-        <img src="/logo.png" alt="KataLog" style={{ marginLeft: "auto", height: 18, objectFit: "contain" }} />
+        <img src="/logo.png" alt="KataLog" style={{ marginLeft: "auto", height: 20, objectFit: "contain" }} />
       </header>
 
       {/* スクロールエリア */}

@@ -19,11 +19,11 @@ export const TermsPage = () => {
                   strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </button>
-        <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 16, fontWeight: 600,
+        <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 17, fontWeight: 600,
                      color: "var(--color-text-main)", letterSpacing: "0.01em" }}>
           TERMS: 利用規約
         </h1>
-        <img src="/logo.png" alt="KataLog" style={{ marginLeft: "auto", height: 18, objectFit: "contain" }} />
+        <img src="/logo.png" alt="KataLog" style={{ marginLeft: "auto", height: 20, objectFit: "contain" }} />
       </header>
 
       <div style={{ flex: 1, overflowY: "auto", padding: "24px 20px 48px", maxWidth: 680,

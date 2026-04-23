@@ -198,7 +198,7 @@ export const HomePage = () => {
         {/* 左: タイトル + ペア名 ／ 右: ロゴ + 完了数 */}
         <div style={{ display: "flex", alignItems: "flex-start" }}>
           <div style={{ flex: 1 }}>
-            <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 16, fontWeight: 600,
+            <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 17, fontWeight: 600,
                          color: "var(--color-text-main)", letterSpacing: "0.01em" }}>
               おでかけ
             </h1>
@@ -210,7 +210,7 @@ export const HomePage = () => {
             )}
           </div>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
-            <img src="/logo.png" alt="KataLog" style={{ height: 18, objectFit: "contain" }} />
+            <img src="/logo.png" alt="KataLog" style={{ height: 20, objectFit: "contain" }} />
             {items.length > 0 && (
               <p style={{ fontSize: 11, color: "var(--color-text-soft)",
                           fontFamily: "var(--font-sans)", margin: 0 }}>
