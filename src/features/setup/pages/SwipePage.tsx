@@ -179,7 +179,8 @@ export const SwipePage = () => {
       </div>
 
       <div className="relative w-full max-w-sm">
-        <div className="card w-full p-6 flex flex-col items-center gap-4 select-none"
+        <div key={index}
+             className="card w-full p-6 flex flex-col items-center gap-4 select-none"
              style={{
                transform: cardTransform,
                opacity: animating ? 0 : 1,
