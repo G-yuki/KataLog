@@ -14,6 +14,12 @@ import { addManualItem } from "../services/itemService";
 import type { Item, Category, ItemType, ItemStatus } from "../../../types";
 
 type Filter = "all" | Category;
+type Sort = "added" | "alpha" | "distance";
+const SORTS: { value: Sort; label: string; icon: string }[] = [
+  { value: "added",    label: "追加順", icon: "↕" },
+  { value: "alpha",    label: "五十音", icon: "あ" },
+  { value: "distance", label: "距離",   icon: "📍" },
+];
 
 const CATEGORIES: Category[] = ["おでかけ", "映画", "食事", "本", "ゲーム", "音楽", "スポーツ", "その他"];
 const MAPS_KEY = import.meta.env.VITE_MAPS_BROWSER_KEY as string;
@@ -31,9 +37,45 @@ export const HomePage = () => {
   const { items, loading, setStatus, toggleIsWant, removeItem } = useItems(pairId);
 
   const [filter, setFilter] = useState<Filter>("all");
+  const [sort, setSort] = useState<Sort>("added");
+  const [search, setSearch] = useState("");
+  const [userLoc, setUserLoc] = useState<{ lat: number; lng: number } | null>(null);
   const [doneOpen, setDoneOpen] = useState(false);
   const [showGuide, setShowGuide] = useState(() => !localStorage.getItem("homeGuideSeen"));
   const [guideDetailOpen, setGuideDetailOpen] = useState(false);
+
+  const cycleSort = () => {
+    const idx = SORTS.findIndex((s) => s.value === sort);
+    const next = SORTS[(idx + 1) % SORTS.length].value;
+    setSort(next);
+    if (next === "distance" && !userLoc) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => setUserLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        () => {}
+      );
+    }
+  };
+
+  const sortItems = (arr: Item[]): Item[] => {
+    const s = [...arr];
+    if (sort === "alpha") return s.sort((a, b) => a.title.localeCompare(b.title, "ja"));
+    if (sort === "distance" && userLoc) {
+      return s.sort((a, b) => {
+        const da = a.lat != null && a.lng != null
+          ? Math.hypot(a.lat - userLoc.lat, a.lng - userLoc.lng) : Infinity;
+        const db = b.lat != null && b.lng != null
+          ? Math.hypot(b.lat - userLoc.lat, b.lng - userLoc.lng) : Infinity;
+        return da - db;
+      });
+    }
+    return s.sort((a, b) => (a.createdAt?.toMillis() ?? 0) - (b.createdAt?.toMillis() ?? 0));
+  };
+
+  const applySearch = (arr: Item[]): Item[] => {
+    const q = search.trim().toLowerCase();
+    if (!q) return arr;
+    return arr.filter((i) => i.title.toLowerCase().includes(q));
+  };
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const restoredRef = useRef(false);
@@ -118,9 +160,10 @@ export const HomePage = () => {
   const goodItems   = activeItems.filter((i) => !i.isWant && (i.matchTier ?? "good") !== "try");
   const tryItems    = activeItems.filter((i) => !i.isWant && i.matchTier === "try");
 
-  const filteredGood = filter === "all"
-    ? goodItems
-    : goodItems.filter((i: Item) => i.category === filter);
+  const sortedGoItems   = applySearch(sortItems(goItems));
+  const sortedGoodBase  = filter === "all" ? goodItems : goodItems.filter((i) => i.category === filter);
+  const filteredGood    = applySearch(sortItems(sortedGoodBase));
+  const filteredTry     = applySearch(sortItems(tryItems));
 
   const progress = items.length > 0 ? doneItems.length / items.length : 0;
 
@@ -172,7 +215,7 @@ export const HomePage = () => {
         )}
       </header>
 
-      {/* ── フィルター + 追加ボタン ── */}
+      {/* ── フィルター + 並び替え ── */}
       <div style={{ flexShrink: 0, display: "flex", alignItems: "center",
                     background: "var(--color-bg)", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
         <div data-guide="filter-area"
@@ -190,29 +233,52 @@ export const HomePage = () => {
             </button>
           ))}
         </div>
-        <button data-guide="add-btn"
-                onClick={() => setShowAddModal(true)}
-                style={{ flexShrink: 0, padding: "0 16px 0 12px", height: "100%",
+        {/* 並び替えボタン */}
+        <button onClick={cycleSort}
+                style={{ flexShrink: 0, padding: "0 14px 0 10px", height: "100%",
                          background: "none", border: "none", borderLeft: "1px solid rgba(0,0,0,0.1)",
-                         cursor: "pointer", display: "flex", alignItems: "center", gap: 3 }}>
-          <span style={{ fontSize: 12, color: "var(--color-text-mid)",
-                         fontFamily: "var(--font-sans)", lineHeight: 1 }}>
-            追加
+                         cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
+          <span style={{ fontSize: 13 }}>{SORTS.find((s) => s.value === sort)?.icon}</span>
+          <span style={{ fontSize: 10, color: "var(--color-text-mid)", fontFamily: "var(--font-sans)" }}>
+            {SORTS.find((s) => s.value === sort)?.label}
           </span>
-          <span style={{ fontSize: 18, color: "var(--color-primary)", lineHeight: 1, fontWeight: 400 }}>+</span>
         </button>
+      </div>
+
+      {/* ── 検索窓 ── */}
+      <div style={{ flexShrink: 0, padding: "6px 12px",
+                    background: "var(--color-bg)", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6,
+                      background: "rgba(0,0,0,0.05)", borderRadius: 20, padding: "5px 12px" }}>
+          <span style={{ fontSize: 12, opacity: 0.5 }}>🔍</span>
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="アイテムを検索..."
+            style={{ flex: 1, fontSize: 12, border: "none", outline: "none",
+                     background: "transparent", color: "var(--color-text-main)",
+                     fontFamily: "var(--font-sans)" }}
+          />
+          {search && (
+            <button onClick={() => setSearch("")}
+                    style={{ background: "none", border: "none", cursor: "pointer",
+                             fontSize: 14, color: "var(--color-text-soft)", lineHeight: 1, padding: 0 }}>
+              ×
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ── スクロールエリア ── */}
       <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", scrollbarWidth: "none", paddingBottom: 80 }}>
 
         {/* お気に入りセクション */}
-        {goItems.length > 0 && (
+        {sortedGoItems.length > 0 && (
           <div style={{ borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
             <SectionLabel>お気に入り</SectionLabel>
             <div style={{ padding: "0 20px 12px", display: "flex", gap: 10,
                           overflowX: "auto", scrollbarWidth: "none" }}>
-              {goItems.map((item) => (
+              {sortedGoItems.map((item) => (
                 <GoCard key={item.itemId} item={item}
                         onClick={() => navigateToDetail(item.itemId)}
                         onDone={() => setStatus(item.itemId, "done")}
@@ -254,12 +320,12 @@ export const HomePage = () => {
         </div>
 
         {/* 試してみる？セクション */}
-        {tryItems.length > 0 && (
+        {filteredTry.length > 0 && (
           <div style={{ borderTop: "1px solid rgba(0,0,0,0.05)" }}>
             <SectionLabel>試してみる？</SectionLabel>
             <div style={{ padding: "0 20px 4px",
                           display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              {tryItems.map((item) => (
+              {filteredTry.map((item) => (
                 <GoodCard key={item.itemId} item={item}
                           onTap={() => navigateToDetail(item.itemId)}
                           onWant={() => toggleIsWant(item.itemId, item.isWant)}
@@ -300,6 +366,18 @@ export const HomePage = () => {
 
       {/* ── ボトムナビ ── */}
       <BottomNav />
+
+      {/* ── 追加FAB ── */}
+      <button data-guide="add-btn"
+              onClick={() => setShowAddModal(true)}
+              style={{ position: "fixed", bottom: 88, right: 20, zIndex: 30,
+                       width: 52, height: 52, borderRadius: "50%",
+                       background: "var(--color-primary)", color: "#fff", border: "none",
+                       fontSize: 26, cursor: "pointer",
+                       boxShadow: "0 4px 16px rgba(30,45,90,0.35)",
+                       display: "flex", alignItems: "center", justifyContent: "center" }}>
+        +
+      </button>
 
       {/* ── ホームガイド（初回のみ） ── */}
       {showGuide && !loading && items.length > 0 && (
