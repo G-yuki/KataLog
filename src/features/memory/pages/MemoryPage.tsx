@@ -1,5 +1,5 @@
 // src/features/memory/pages/MemoryPage.tsx
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loading } from "../../../components/Loading";
 import { BottomNav } from "../../../components/BottomNav";
@@ -10,22 +10,34 @@ import { functions } from "../../../firebase/functions";
 import { CATEGORY_STYLE } from "../../../lib/constants";
 import { type Timestamp } from "firebase/firestore";
 
-// TODO: 今年・全期間は有料プランで対応予定
-type PeriodFilter = "month" | "3months" | "6months";
-
-const PERIOD_FILTERS: { id: PeriodFilter; label: string; aiLabel: string }[] = [
-  { id: "month",   label: "今月",     aiLabel: "今月" },
-  { id: "3months", label: "過去3ヶ月", aiLabel: "過去3ヶ月" },
-  { id: "6months", label: "半年",     aiLabel: "過去半年" },
-];
-
-const getCutoff = (filter: PeriodFilter): Date => {
+const todayYM = () => {
   const d = new Date();
-  if (filter === "month")   { d.setDate(1); d.setHours(0, 0, 0, 0); }
-  if (filter === "3months") { d.setMonth(d.getMonth() - 3); d.setHours(0, 0, 0, 0); }
-  if (filter === "6months") { d.setMonth(d.getMonth() - 6); d.setHours(0, 0, 0, 0); }
-  return d;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 };
+
+const monthStart = (ym: string): Date => {
+  const [y, m] = ym.split("-").map(Number);
+  return new Date(y, m - 1, 1, 0, 0, 0, 0);
+};
+
+const monthEnd = (ym: string): Date => {
+  const [y, m] = ym.split("-").map(Number);
+  return new Date(y, m, 0, 23, 59, 59, 999);
+};
+
+const getAiLabel = (start: string, end: string): string => {
+  const [sy, sm] = start.split("-").map(Number);
+  const [ey, em] = end.split("-").map(Number);
+  if (start === end) return `${sy}年${sm}月`;
+  const months = (ey - sy) * 12 + (em - sm) + 1;
+  if (months <= 3) return `${sy}年${sm}月〜${ey}年${em}月`;
+  if (months <= 6) return `${sy}年${sm}月〜${ey}年${em}月（半年程度）`;
+  if (months <= 9) return `${sy}年${sm}月〜${ey}年${em}月（約3/4年）`;
+  return `${sy}年${sm}月〜${ey}年${em}月（約1年間）`;
+};
+
+const fmtMonthYear = (d: Date, multiYear: boolean) =>
+  multiYear ? `${d.getFullYear()}/${d.getMonth() + 1}月` : `${d.getMonth() + 1}月`;
 
 export const MemoryPage = () => {
   const navigate = useNavigate();
@@ -43,7 +55,9 @@ export const MemoryPage = () => {
   const todoItems = items.filter((i) => i.status !== "done");
 
   const [showIntro, setShowIntro] = useState(() => !localStorage.getItem("memoryIntroSeen"));
-  const [periodFilter, setPeriodFilter] = useState<PeriodFilter>("month");
+  const [startMonth, setStartMonth] = useState(todayYM());
+  const [endMonth, setEndMonth] = useState(todayYM());
+  const periodRestoredRef = useRef(false);
   const [generating, setGenerating] = useState(false);
   const [memory, setMemory] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -53,22 +67,59 @@ export const MemoryPage = () => {
     if (!pairLoading && !pairId) navigate("/");
   }, [pairId, pairLoading, navigate]);
 
-  // フィルター変更時は生成結果をリセット
+  // 期間を sessionStorage で保持（戻り時リセット防止）
   useEffect(() => {
-    setMemory(null);
-    setGenError(null);
-  }, [periodFilter]);
+    if (!pairId || periodRestoredRef.current) return;
+    periodRestoredRef.current = true;
+    try {
+      const saved = sessionStorage.getItem(`memory_period_${pairId}`);
+      if (saved) {
+        const { s, e } = JSON.parse(saved) as { s: string; e: string };
+        setStartMonth(s);
+        setEndMonth(e);
+      }
+    } catch { /* ignore */ }
+  }, [pairId]);
 
-  // 期間フィルターに応じた完了アイテムを計算（UIは新しい順、AI送信は古い順）
-  const filteredDoneItems = (() => {
-    const cutoff = getCutoff(periodFilter);
-    return allDoneItems.filter((i) => {
-      const ts = i.completedAt as Timestamp | undefined;
-      return ts && ts.toDate() >= cutoff;
-    });
-  })();
+  const savePeriod = (s: string, e: string) => {
+    if (pairId) sessionStorage.setItem(`memory_period_${pairId}`, JSON.stringify({ s, e }));
+  };
 
-  const currentFilter = PERIOD_FILTERS.find((f) => f.id === periodFilter)!;
+  const handleSetStart = (v: string) => {
+    const newStart = v > endMonth ? endMonth : v;
+    setStartMonth(newStart);
+    savePeriod(newStart, endMonth);
+    setMemory(null); setGenError(null);
+  };
+
+  const handleSetEnd = (v: string) => {
+    const today = todayYM();
+    const newEnd = v > today ? today : v < startMonth ? startMonth : v;
+    setEndMonth(newEnd);
+    savePeriod(startMonth, newEnd);
+    setMemory(null); setGenError(null);
+  };
+
+  const filteredDoneItems = allDoneItems.filter((i) => {
+    const ts = i.completedAt as Timestamp | undefined;
+    if (!ts) return false;
+    const d = ts.toDate();
+    return d >= monthStart(startMonth) && d <= monthEnd(endMonth);
+  });
+
+  // 月セクション用: 複数年にまたがるか
+  const years = new Set(
+    filteredDoneItems.map((i) => (i.completedAt as Timestamp).toDate().getFullYear())
+  );
+  const multiYear = years.size > 1;
+
+  const periodLabel = startMonth === endMonth
+    ? (startMonth === todayYM() ? "今月" : (() => { const [y, m] = startMonth.split("-").map(Number); return `${y}年${m}月`; })())
+    : (() => {
+        const [sy, sm] = startMonth.split("-").map(Number);
+        const [ey, em] = endMonth.split("-").map(Number);
+        return sy === ey ? `${sy}年${sm}〜${em}月` : `${sy}/${sm}月〜${ey}/${em}月`;
+      })();
 
   const handleGenerate = async () => {
     if (filteredDoneItems.length === 0) return;
@@ -84,7 +135,6 @@ export const MemoryPage = () => {
         },
         { memory: string }
       >(functions, "generateMemory");
-      // 古い順（昇順）でソート済みなのでそのまま渡す
       const payload = filteredDoneItems.map((i) => ({
         title: i.title,
         category: i.category,
@@ -94,11 +144,10 @@ export const MemoryPage = () => {
           ? `${(i.completedAt as Timestamp).toDate().getMonth() + 1}月`
           : "",
       }));
-      const todoPayload = todoItems.map((i) => ({ title: i.title, category: i.category }));
       const result = await fn({
         items: payload,
-        todoItems: todoPayload,
-        period: currentFilter.aiLabel,
+        todoItems: todoItems.map((i) => ({ title: i.title, category: i.category })),
+        period: getAiLabel(startMonth, endMonth),
       });
       setMemory(result.data.memory);
     } catch {
@@ -129,32 +178,41 @@ export const MemoryPage = () => {
                        display: "flex", alignItems: "center" }}>
         <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 16, fontWeight: 600,
                      color: "var(--color-text-main)", letterSpacing: "0.01em" }}>
-          思い出
+          かたログ
         </h1>
         <img src="/logo.png" alt="KataLog" style={{ marginLeft: "auto", height: 18, objectFit: "contain" }} />
       </header>
 
-      {/* 期間フィルターはスクロールエリア内でstickyにする */}
       <div style={{ flex: 1, overflowY: "auto", scrollbarWidth: "none", paddingBottom: 80 }}>
 
-        <div style={{ position: "sticky", top: 0, zIndex: 15, padding: "10px 20px 8px",
-                      display: "flex", gap: 6, background: "var(--color-bg)",
-                      borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
-          {PERIOD_FILTERS.map(({ id, label }) => (
-            <button key={id} onClick={() => setPeriodFilter(id)}
-                    style={{ flexShrink: 0, fontSize: 11, padding: "5px 13px",
-                             borderRadius: 20, whiteSpace: "nowrap",
-                             fontFamily: "var(--font-sans)", cursor: "pointer",
-                             border: periodFilter === id ? "none" : "1px solid rgba(0,0,0,0.12)",
-                             background: periodFilter === id ? "var(--color-text-main)" : "transparent",
-                             color: periodFilter === id ? "var(--color-bg)" : "#5C4A35" }}>
-              {label}
-            </button>
-          ))}
+        {/* 期間選択（開始月〜終了月） */}
+        <div style={{ position: "sticky", top: 0, zIndex: 15, padding: "8px 16px",
+                      background: "var(--color-bg)", borderBottom: "1px solid rgba(0,0,0,0.05)",
+                      display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 11, color: "var(--color-text-soft)", flexShrink: 0 }}>期間</span>
+          <input
+            type="month"
+            value={startMonth}
+            max={endMonth}
+            onChange={(e) => handleSetStart(e.target.value)}
+            style={{ flex: 1, fontSize: 12, border: "1px solid var(--color-border)",
+                     borderRadius: 8, padding: "4px 8px", background: "var(--color-bg)",
+                     color: "var(--color-text-main)", fontFamily: "var(--font-sans)", outline: "none" }}
+          />
+          <span style={{ fontSize: 12, color: "var(--color-text-soft)", flexShrink: 0 }}>〜</span>
+          <input
+            type="month"
+            value={endMonth}
+            min={startMonth}
+            max={todayYM()}
+            onChange={(e) => handleSetEnd(e.target.value)}
+            style={{ flex: 1, fontSize: 12, border: "1px solid var(--color-border)",
+                     borderRadius: 8, padding: "4px 8px", background: "var(--color-bg)",
+                     color: "var(--color-text-main)", fontFamily: "var(--font-sans)", outline: "none" }}
+          />
         </div>
 
         {allDoneItems.length === 0 ? (
-          /* ── 空の状態 ── */
           <div style={{ padding: "60px 32px", textAlign: "center" }}>
             <p style={{ fontSize: 40, marginBottom: 16 }}>📖</p>
             <p style={{ fontSize: 15, fontWeight: 500, color: "var(--color-text-main)",
@@ -191,63 +249,88 @@ export const MemoryPage = () => {
               </div>
               <div style={{ flex: 1, borderLeft: "1px solid var(--color-border)", paddingLeft: 16 }}>
                 <p style={{ fontSize: 11, color: "var(--color-text-mid)", lineHeight: 2.2 }}>
-                  <strong>{currentFilter.label}</strong>に完了した体験は
+                  <strong>{periodLabel}</strong>に完了した体験は
                   <strong>{filteredDoneItems.length}件</strong>です。<br />
                   この期間の思い出を振り返りましょう。
                 </p>
               </div>
             </div>
 
-            {/* フィルター後にアイテムがない場合 */}
             {filteredDoneItems.length === 0 ? (
               <div style={{ padding: "32px 24px", textAlign: "center",
                             background: "#fff", borderRadius: 14,
                             border: "1px solid rgba(0,0,0,0.07)" }}>
                 <p style={{ fontSize: 13, color: "var(--color-text-soft)" }}>
-                  {currentFilter.label}に完了した体験はありません
+                  {periodLabel}に完了した体験はありません
                 </p>
               </div>
             ) : (
               <>
-                {/* 完了アイテム一覧（古い順で表示） */}
+                {/* 体験記録（月タイムライン） */}
                 <div>
                   <p style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-soft)",
                               letterSpacing: "0.08em", marginBottom: 10 }}>
                     体験記録
                   </p>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {filteredDoneItems.map((item) => {
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {filteredDoneItems.map((item, idx) => {
+                      const d = (item.completedAt as Timestamp).toDate();
+                      const monthKey = `${d.getFullYear()}-${d.getMonth()}`;
+                      const prevD = idx > 0 && filteredDoneItems[idx - 1].completedAt
+                        ? (filteredDoneItems[idx - 1].completedAt as Timestamp).toDate() : null;
+                      const prevKey = prevD ? `${prevD.getFullYear()}-${prevD.getMonth()}` : null;
+                      const showMonth = monthKey !== prevKey;
                       const s = CATEGORY_STYLE[item.category] ?? CATEGORY_STYLE["その他"];
+
                       return (
-                        <button key={item.itemId}
-                                onClick={() => navigate(`/home/${item.itemId}`, { state: { from: "/memory" } })}
-                                style={{ display: "flex", alignItems: "center", gap: 12, width: "100%",
-                                         background: "#fff", borderRadius: 10, textAlign: "left",
-                                         border: "1px solid rgba(0,0,0,0.06)", padding: "10px 14px",
-                                         cursor: "pointer" }}>
-                          <div style={{ width: 34, height: 34, borderRadius: 8, flexShrink: 0,
-                                        background: s.bg, display: "flex", alignItems: "center",
-                                        justifyContent: "center", fontSize: 16 }}>
-                            {s.emoji}
+                        <div key={item.itemId} style={{ display: "flex", alignItems: "stretch", gap: 8 }}>
+                          {/* 左: タイムライン列（月ラベル＋縦線） */}
+                          <div style={{ width: 30, flexShrink: 0, display: "flex",
+                                        flexDirection: "column", alignItems: "center" }}>
+                            {showMonth && (
+                              <span style={{ fontSize: 9, fontWeight: 700,
+                                             color: "var(--color-secondary)",
+                                             letterSpacing: "0.04em", lineHeight: 1.3,
+                                             textAlign: "center", whiteSpace: "nowrap",
+                                             paddingTop: 2, paddingBottom: 2 }}>
+                                {fmtMonthYear(d, multiYear)}
+                              </span>
+                            )}
+                            {/* 縦線: 全アイテムに表示 */}
+                            <div style={{ width: 1, flex: 1, minHeight: 16,
+                                          background: "rgba(0,0,0,0.12)" }} />
                           </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <p style={{ fontSize: 13, fontWeight: 500, color: "var(--color-text-main)",
-                                        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                              {item.title}
-                            </p>
-                            <p style={{ fontSize: 10, color: "var(--color-text-soft)", marginTop: 2 }}>
-                              {item.category}
-                              {item.rating != null && ` · ${"★".repeat(item.rating)}`}
-                            </p>
-                          </div>
-                          {item.memo && (
-                            <p style={{ fontSize: 10, color: "var(--color-text-mid)", maxWidth: 80,
-                                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                                        flexShrink: 0 }}>
-                              {item.memo}
-                            </p>
-                          )}
-                        </button>
+                          {/* 右: アイテムカード */}
+                          <button
+                            onClick={() => navigate(`/home/${item.itemId}`, { state: { from: "/memory" } })}
+                            style={{ flex: 1, display: "flex", alignItems: "center", gap: 12,
+                                     background: "#fff", borderRadius: 10, textAlign: "left",
+                                     border: "1px solid rgba(0,0,0,0.06)", padding: "10px 14px",
+                                     cursor: "pointer" }}>
+                            <div style={{ width: 34, height: 34, borderRadius: 8, flexShrink: 0,
+                                          background: s.bg, display: "flex", alignItems: "center",
+                                          justifyContent: "center", fontSize: 16 }}>
+                              {s.emoji}
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <p style={{ fontSize: 13, fontWeight: 500, color: "var(--color-text-main)",
+                                          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                {item.title}
+                              </p>
+                              <p style={{ fontSize: 10, color: "var(--color-text-soft)", marginTop: 2 }}>
+                                {item.category}
+                                {item.rating != null && ` · ${"★".repeat(item.rating)}`}
+                              </p>
+                            </div>
+                            {item.memo && (
+                              <p style={{ fontSize: 10, color: "var(--color-text-mid)", maxWidth: 80,
+                                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                                          flexShrink: 0 }}>
+                                {item.memo}
+                              </p>
+                            )}
+                          </button>
+                        </div>
                       );
                     })}
                   </div>
@@ -288,7 +371,6 @@ export const MemoryPage = () => {
                         {memory}
                       </p>
                     </div>
-
                     <div style={{ display: "flex", gap: 10 }}>
                       <button onClick={handleCopy}
                               style={{ flex: 1, padding: "12px", background: "#fff",
@@ -311,7 +393,6 @@ export const MemoryPage = () => {
                 )}
               </>
             )}
-
           </div>
         )}
       </div>
@@ -325,7 +406,7 @@ export const MemoryPage = () => {
             <div style={{ textAlign: "center" }}>
               <p style={{ fontSize: 32, marginBottom: 8 }}>📖</p>
               <h2 style={{ fontSize: 17, fontWeight: 600, color: "var(--color-text-main)" }}>
-                Memory とは？
+                思い出 — ふたりのかたログ — とは？
               </h2>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -351,7 +432,6 @@ export const MemoryPage = () => {
         </div>
       )}
 
-      {/* ── ボトムナビ ── */}
       <BottomNav />
     </div>
   );
