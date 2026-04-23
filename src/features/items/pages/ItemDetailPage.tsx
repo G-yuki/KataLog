@@ -74,9 +74,10 @@ export const ItemDetailPage = () => {
     enrichCalled.current = true;
     (async () => {
       const pairSnap = await getDoc(doc(db, "pairs", pairId));
-      const prefecture = pairSnap.exists()
-        ? (pairSnap.data().hearing?.prefecture as string | undefined)
-        : undefined;
+      const hearing = pairSnap.exists() ? pairSnap.data().hearing : undefined;
+      const prefecture = hearing?.range === "anywhere"
+        ? undefined
+        : (hearing?.prefecture as string | undefined);
 
       const fn = httpsCallable(functions, "enrichItem");
       fn({
