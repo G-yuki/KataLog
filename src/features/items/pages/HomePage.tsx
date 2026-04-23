@@ -33,6 +33,7 @@ export const HomePage = () => {
   const [filter, setFilter] = useState<Filter>("all");
   const [doneOpen, setDoneOpen] = useState(false);
   const [showGuide, setShowGuide] = useState(() => !localStorage.getItem("homeGuideSeen"));
+  const [guideDetailOpen, setGuideDetailOpen] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const restoredRef = useRef(false);
@@ -211,8 +212,8 @@ export const HomePage = () => {
             <SectionLabel>お気に入り</SectionLabel>
             <div style={{ padding: "0 20px 12px", display: "flex", gap: 10,
                           overflowX: "auto", scrollbarWidth: "none" }}>
-              {goItems.map((item, i) => (
-                <GoCard key={item.itemId} item={item} isFirst={i === 0}
+              {goItems.map((item) => (
+                <GoCard key={item.itemId} item={item}
                         onClick={() => navigateToDetail(item.itemId)}
                         onDone={() => setStatus(item.itemId, "done")}
                         onWant={() => toggleIsWant(item.itemId, item.isWant)}
@@ -302,10 +303,17 @@ export const HomePage = () => {
 
       {/* ── ホームガイド（初回のみ） ── */}
       {showGuide && !loading && items.length > 0 && (
-        <HomeGuide onClose={() => {
-          localStorage.setItem("homeGuideSeen", "1");
-          setShowGuide(false);
-        }} />
+        <>
+          {guideDetailOpen && (
+            <GuideDetailOverlay item={items.find((i) => i.status !== "done") ?? items[0]} />
+          )}
+          <HomeGuide
+            onClose={() => { localStorage.setItem("homeGuideSeen", "1"); setShowGuide(false); }}
+            onOpenDetail={() => setGuideDetailOpen(true)}
+            onCloseDetail={() => setGuideDetailOpen(false)}
+            detailReady={guideDetailOpen}
+          />
+        </>
       )}
 
       {/* ── 手動追加モーダル ── */}
@@ -453,8 +461,70 @@ const SectionLabel = ({ children, style }: { children: React.ReactNode; style?: 
   </p>
 );
 
-const GoCard = ({ item, onClick, onDone, onWant, onDelete, isFirst }:
-  { item: Item; onClick: () => void; onDone: () => void; onWant: () => void; onDelete: () => void; isFirst?: boolean }) => {
+const GuideDetailOverlay = ({ item }: { item: Item }) => {
+  const hasPhoto = !!item.placePhotoRef && item.placePhotoRef.startsWith("https://");
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 1050,
+      background: "var(--color-bg)", display: "flex", flexDirection: "column",
+      fontFamily: "var(--font-sans)",
+    }}>
+      {hasPhoto ? (
+        <div style={{ position: "relative", width: "100%", height: 220, flexShrink: 0 }}>
+          <img src={item.placePhotoRef!} alt={item.title}
+               style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          <div style={{ position: "absolute", inset: 0,
+                        background: "linear-gradient(to bottom, rgba(0,0,0,0.35) 0%, transparent 50%, rgba(0,0,0,0.5) 100%)" }} />
+          <div style={{ position: "absolute", bottom: 8, right: 12,
+                        display: "flex", flexDirection: "column", alignItems: "center", gap: 1 }}>
+            <button data-guide="heart-btn"
+                    style={{ background: "none", border: "none", cursor: "pointer", fontSize: 26, lineHeight: 1 }}>
+              {item.isWant ? "❤️" : "🤍"}
+            </button>
+            <span style={{ fontSize: 9, color: "rgba(255,255,255,0.85)",
+                           textShadow: "0 1px 3px rgba(0,0,0,0.6)", fontFamily: "var(--font-sans)" }}>
+              お気に入り
+            </span>
+          </div>
+        </div>
+      ) : (
+        <div style={{ flexShrink: 0, paddingTop: 52, paddingLeft: 16, paddingRight: 16, paddingBottom: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 17, fontWeight: 700, flex: 1, color: "var(--color-text-main)" }}>
+              {item.title}
+            </span>
+            <button data-guide="heart-btn"
+                    style={{ background: "none", border: "none", cursor: "pointer",
+                             display: "flex", flexDirection: "column", alignItems: "center", gap: 1 }}>
+              <span style={{ fontSize: 22, lineHeight: 1 }}>{item.isWant ? "❤️" : "🤍"}</span>
+              <span style={{ fontSize: 9, color: "var(--color-text-soft)" }}>お気に入り</span>
+            </button>
+          </div>
+        </div>
+      )}
+      <div style={{ flex: 1, overflowY: "auto", padding: "16px 16px 32px" }}>
+        {hasPhoto && (
+          <p style={{ fontSize: 17, fontWeight: 700, color: "var(--color-text-main)", marginBottom: 16 }}>
+            {item.title}
+          </p>
+        )}
+        <div className="card p-4 mb-4">
+          <div className="flex items-center justify-between">
+            <p style={{ fontSize: 14, fontWeight: 700, color: "var(--color-text-main)" }}>⏳ 未完了</p>
+            <button data-guide="done-btn"
+                    className="px-4 py-2 rounded-full font-bold text-sm"
+                    style={{ background: "var(--color-primary)", color: "white" }}>
+              完了にする
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const GoCard = ({ item, onClick, onDone, onWant, onDelete }:
+  { item: Item; onClick: () => void; onDone: () => void; onWant: () => void; onDelete: () => void }) => {
   const s = CATEGORY_STYLE[item.category] ?? CATEGORY_STYLE["その他"];
   const hasPhoto = !!item.placePhotoRef;
   return (
@@ -493,8 +563,7 @@ const GoCard = ({ item, onClick, onDone, onWant, onDelete, isFirst }:
         </div>
       )}
       {/* ✓ 完了ボタン（右上） */}
-      <button {...(isFirst ? { "data-guide": "done-btn" } : {})}
-              onClick={(e) => { e.stopPropagation(); onDone(); }}
+      <button onClick={(e) => { e.stopPropagation(); onDone(); }}
               style={{ position: "absolute", top: 7, right: 7.5, zIndex: 3,
                        width: 17, height: 17, borderRadius: "50%",
                        background: "rgba(255,255,255,0.2)", border: "1.5px solid rgba(255,255,255,0.5)",
@@ -528,8 +597,7 @@ const GoCard = ({ item, onClick, onDone, onWant, onDelete, isFirst }:
         </p>
       </div>
       {/* ❤️ お気に入り（右下） */}
-      <button {...(isFirst ? { "data-guide": "heart-btn" } : {})}
-              onClick={(e) => { e.stopPropagation(); onWant(); }}
+      <button onClick={(e) => { e.stopPropagation(); onWant(); }}
               style={{ position: "absolute", bottom: 11, right: 8, zIndex: 3,
                        background: "transparent", border: "none",
                        fontSize: 13, cursor: "pointer", lineHeight: 1 }}>

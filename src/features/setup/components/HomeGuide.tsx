@@ -1,39 +1,68 @@
 // src/features/setup/components/HomeGuide.tsx
 import { useState, useEffect } from "react";
 
-interface Step {
+type Phase = "home" | "detail";
+
+interface StepDef {
   target: string;
   desc: string;
+  phase: Phase;
 }
 
-const ALL_STEPS: Step[] = [
-  { target: "heart-btn", desc: "❤️ をタップして\nお気に入りへ移動" },
-  { target: "done-btn", desc: "体験したら\n完了チェック ✓" },
-  { target: "filter-area", desc: "カテゴリで\nアイテムを絞り込み" },
-  { target: "add-btn", desc: "自分で\nアイテムを追加 ＋" },
+const ALL_STEPS: StepDef[] = [
+  { target: "filter-area", desc: "カテゴリで\nアイテムを絞り込み", phase: "home" },
+  { target: "add-btn",     desc: "新しく\nアイテムを追加 ＋",    phase: "home" },
+  { target: "heart-btn",   desc: "❤️ をタップして\nお気に入りへ移動", phase: "detail" },
+  { target: "done-btn",    desc: "体験したら\n完了チェック ✅",    phase: "detail" },
 ];
 
-interface ResolvedStep extends Step {
-  rect: DOMRect;
+export interface HomeGuideProps {
+  onClose: () => void;
+  onOpenDetail: () => void;
+  onCloseDetail: () => void;
+  detailReady: boolean;
 }
 
-export const HomeGuide = ({ onClose }: { onClose: () => void }) => {
-  const [steps, setSteps] = useState<ResolvedStep[]>([]);
+export const HomeGuide = ({ onClose, onOpenDetail, onCloseDetail, detailReady }: HomeGuideProps) => {
   const [index, setIndex] = useState(0);
+  const [rect, setRect] = useState<DOMRect | null>(null);
+  const [waitingForDetail, setWaitingForDetail] = useState(false);
   const [done, setDone] = useState(false);
 
-  useEffect(() => {
+  const resolveRect = (i: number) => {
     requestAnimationFrame(() => {
-      const resolved = ALL_STEPS.flatMap((s) => {
-        const el = document.querySelector(`[data-guide="${s.target}"]`);
-        if (!el) return [];
-        return [{ ...s, rect: el.getBoundingClientRect() }];
-      });
-      setSteps(resolved);
+      const el = document.querySelector(`[data-guide="${ALL_STEPS[i].target}"]`);
+      if (el) setRect(el.getBoundingClientRect());
     });
-  }, []);
+  };
 
-  if (steps.length === 0) return null;
+  useEffect(() => { resolveRect(0); }, []);
+
+  useEffect(() => {
+    if (detailReady && waitingForDetail) {
+      setWaitingForDetail(false);
+      resolveRect(index);
+    }
+  }, [detailReady, waitingForDetail, index]);
+
+  const handleTap = () => {
+    const nextIndex = index + 1;
+    if (nextIndex >= ALL_STEPS.length) {
+      onCloseDetail();
+      setDone(true);
+      return;
+    }
+    const nextStep = ALL_STEPS[nextIndex];
+    if (nextStep.phase === "detail" && !detailReady) {
+      setIndex(nextIndex);
+      setRect(null);
+      onOpenDetail();
+      setWaitingForDetail(true);
+    } else {
+      setIndex(nextIndex);
+      resolveRect(nextIndex);
+    }
+  };
 
   if (done) {
     return (
@@ -67,39 +96,29 @@ export const HomeGuide = ({ onClose }: { onClose: () => void }) => {
     );
   }
 
-  const current = steps[index];
-  const r = current.rect;
+  if (!rect) return null;
+
   const PAD = 10;
-  const spotTop  = r.top  - PAD;
-  const spotLeft = r.left - PAD;
-  const spotW    = r.width  + PAD * 2;
-  const spotH    = r.height + PAD * 2;
+  const spotTop  = rect.top  - PAD;
+  const spotLeft = rect.left - PAD;
+  const spotW    = rect.width  + PAD * 2;
+  const spotH    = rect.height + PAD * 2;
   const spotMidY = spotTop + spotH / 2;
   const showBelow = spotMidY < window.innerHeight * 0.55;
-
-  const descTop = showBelow ? spotTop + spotH + 28 : undefined;
+  const descTop    = showBelow ? spotTop + spotH + 28 : undefined;
   const descBottom = !showBelow ? window.innerHeight - spotTop + 28 : undefined;
 
-  const handleTap = () => {
-    if (index < steps.length - 1) {
-      setIndex((i) => i + 1);
-    } else {
-      setDone(true);
-    }
-  };
+  const current = ALL_STEPS[index];
 
   return (
     <div
       onClick={handleTap}
       style={{ position: "fixed", inset: 0, zIndex: 1100, cursor: "pointer" }}
     >
-      {/* スポットライト（box-shadowで周囲を暗幕化） */}
+      {/* スポットライト */}
       <div style={{
         position: "fixed",
-        top: spotTop,
-        left: spotLeft,
-        width: spotW,
-        height: spotH,
+        top: spotTop, left: spotLeft, width: spotW, height: spotH,
         borderRadius: 12,
         boxShadow: "0 0 0 9999px rgba(0,0,0,0.72)",
         pointerEvents: "none",
@@ -109,13 +128,9 @@ export const HomeGuide = ({ onClose }: { onClose: () => void }) => {
       {/* 説明テキスト */}
       <div style={{
         position: "fixed",
-        top: descTop,
-        bottom: descBottom,
-        left: "50%",
-        transform: "translateX(-50%)",
-        textAlign: "center",
-        pointerEvents: "none",
-        width: 240,
+        top: descTop, bottom: descBottom,
+        left: "50%", transform: "translateX(-50%)",
+        textAlign: "center", pointerEvents: "none", width: 240,
       }}>
         <p style={{
           fontSize: 17, fontWeight: 700, color: "#fff",
@@ -129,22 +144,14 @@ export const HomeGuide = ({ onClose }: { onClose: () => void }) => {
 
       {/* ステップインジケーター + ヒント */}
       <div style={{
-        position: "fixed",
-        bottom: 100,
-        left: "50%",
-        transform: "translateX(-50%)",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: 10,
+        position: "fixed", bottom: 100, left: "50%", transform: "translateX(-50%)",
+        display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
         pointerEvents: "none",
       }}>
         <div style={{ display: "flex", gap: 6 }}>
-          {steps.map((_, i) => (
+          {ALL_STEPS.map((_, i) => (
             <div key={i} style={{
-              width: i === index ? 20 : 6,
-              height: 6,
-              borderRadius: 3,
+              width: i === index ? 20 : 6, height: 6, borderRadius: 3,
               background: i === index ? "#fff" : "rgba(255,255,255,0.35)",
               transition: "width 0.25s ease, background 0.25s ease",
             }} />
