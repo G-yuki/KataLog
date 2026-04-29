@@ -26,3 +26,4 @@ docs
 *.sln
 *.sw?
 *.txt
+.html

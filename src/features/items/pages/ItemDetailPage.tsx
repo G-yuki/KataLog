@@ -44,6 +44,7 @@ export const ItemDetailPage = () => {
   const [editingCompletedAt, setEditingCompletedAt] = useState(false);
   const [completedAtDate, setCompletedAtDate] = useState("");
   const [completedAtHour, setCompletedAtHour] = useState(12);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const enrichCalled = useRef(false);
 
   useEffect(() => {
@@ -59,14 +60,15 @@ export const ItemDetailPage = () => {
     setRating(item.rating ?? null);
   }, [item]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Places エンリッチ: 写真未取得のとき1回だけ呼ぶ
+  // Places エンリッチ: placeId===null（未検索）のときだけ呼ぶ
+  // placeId===""  → 検索済み・場所なし → スキップ
+  // placeId="xxx" → 検索済み（写真なしも含む）→ スキップ
+  // CF失敗時は placeId が null のまま残るので次回open時に自動リトライ
   useEffect(() => {
     if (!item || !pairId || enrichCalled.current) return;
-    // カテゴリ対象 or userPlaceUrl設定済み → 写真がなければ試行
-    // placeId==="" は「検索済み未発見」なので userPlaceUrl なしの場合はスキップ
     const needsEnrich =
-      item.placePhotoRef === null && (
-        (item.placeId !== "" && (PLACE_CATEGORIES as readonly string[]).includes(item.category)) ||
+      item.placeId === null && (
+        (PLACE_CATEGORIES as readonly string[]).includes(item.category) ||
         !!item.userPlaceUrl
       );
     if (!needsEnrich) return;
@@ -103,8 +105,8 @@ export const ItemDetailPage = () => {
     const trimmed = urlDraft.trim();
     setUrlSaving(true);
     await saveDetail(item.itemId, { userPlaceUrl: trimmed || null });
-    // URL（短縮含む）はサーバー側でリダイレクト解決して場所名を取得
-    if (trimmed) {
+    // URLが変わった場合のみ enrichItem を呼ぶ（同一URL再保存で無駄なAPI呼び出しを防ぐ）
+    if (trimmed && trimmed !== item.userPlaceUrl) {
       enrichCalled.current = true;
       const fn = httpsCallable(functions, "enrichItem");
       fn({ pairId, itemId: item.itemId, title: item.title, userPlaceUrl: trimmed }).catch(() => {
@@ -155,7 +157,7 @@ export const ItemDetailPage = () => {
   };
 
   const handleDelete = async () => {
-    if (!item || !window.confirm("このアイテムを削除しますか？")) return;
+    if (!item) return;
     await removeItem(item.itemId);
     navigate(backTo, { replace: true });
   };
@@ -171,8 +173,7 @@ export const ItemDetailPage = () => {
   const isDone = item.status === "done";
   const isPlaceCategory = (PLACE_CATEGORIES as readonly string[]).includes(item.category);
   const hasPhoto = !!item.placePhotoRef;
-  const isEnriching = item.placePhotoRef === null &&
-    ((item.placeId !== "" && isPlaceCategory) || !!item.userPlaceUrl);
+  const isEnriching = item.placeId === null && (isPlaceCategory || !!item.userPlaceUrl);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100dvh",
@@ -496,7 +497,7 @@ export const ItemDetailPage = () => {
 
         {/* 削除 */}
         <button
-          onClick={handleDelete}
+          onClick={() => setShowDeleteConfirm(true)}
           className="text-sm text-center mt-4 w-full"
           style={{ color: "var(--color-text-soft)" }}
         >
@@ -504,6 +505,41 @@ export const ItemDetailPage = () => {
         </button>
       </div>
       </div>{/* /スクロールエリア */}
+
+      {/* 削除確認ダイアログ */}
+      {showDeleteConfirm && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)",
+                      display: "flex", alignItems: "flex-end", zIndex: 150 }}
+             onClick={() => setShowDeleteConfirm(false)}>
+          <div onClick={(e) => e.stopPropagation()}
+               style={{ width: "100%", background: "var(--color-bg)",
+                        borderRadius: "20px 20px 0 0", padding: "28px 20px 48px",
+                        display: "flex", flexDirection: "column", gap: 8,
+                        fontFamily: "var(--font-sans)" }}>
+            <p style={{ fontSize: 15, fontWeight: 600, color: "var(--color-text-main)",
+                        textAlign: "center" }}>
+              このアイテムを削除しますか？
+            </p>
+            <p style={{ fontSize: 12, color: "var(--color-text-soft)",
+                        textAlign: "center", marginBottom: 8 }}>
+              削除すると元に戻せません
+            </p>
+            <button onClick={handleDelete}
+                    style={{ width: "100%", padding: "14px", borderRadius: 12,
+                             background: "#E53E3E", color: "#fff", border: "none",
+                             fontSize: 15, fontWeight: 600, cursor: "pointer" }}>
+              削除する
+            </button>
+            <button onClick={() => setShowDeleteConfirm(false)}
+                    style={{ width: "100%", padding: "14px", borderRadius: 12,
+                             background: "transparent", color: "var(--color-text-mid)",
+                             border: "1px solid var(--color-border)",
+                             fontSize: 15, cursor: "pointer" }}>
+              キャンセル
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
