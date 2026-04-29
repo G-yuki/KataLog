@@ -27,3 +27,4 @@ docs
 *.sw?
 *.txt
 .html
+functions/package-lock.json
