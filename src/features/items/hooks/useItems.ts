@@ -54,6 +54,7 @@ export const useItems = (pairId: string | null) => {
       placeId?: string | null;
       placePhotoRef?: string | null;
       completedAt?: Timestamp | null;
+      userPhotos?: string[];
     }
   ) => {
     if (!pairId) return Promise.resolve();

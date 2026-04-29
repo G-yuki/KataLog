@@ -367,23 +367,32 @@ export const onItemDeleted = onDocumentDeleted(
     const data = event.data?.data();
     if (!data) return;
 
-    const placePhotoRef: string | null = data.placePhotoRef ?? null;
-    // Storage URL でなければ何もしない
-    if (!placePhotoRef ||
-        (!placePhotoRef.startsWith("https://storage.googleapis.com/") &&
-         !placePhotoRef.startsWith("https://firebasestorage.googleapis.com/"))) return;
-
     const { pairId, itemId } = event.params;
-    const storagePath = `pairs/${pairId}/items/${itemId}.jpg`;
+    const bucket = admin.storage().bucket();
 
-    try {
-      const bucket = admin.storage().bucket();
-      await bucket.file(storagePath).delete();
-      console.log(`onItemDeleted: deleted storage photo ${storagePath}`);
-    } catch (e) {
-      // ファイルが存在しない場合は無視
-      console.warn(`onItemDeleted: could not delete ${storagePath}`, e);
+    // placePhotoRef（Storage URL の場合のみ削除）
+    const placePhotoRef: string | null = data.placePhotoRef ?? null;
+    if (placePhotoRef &&
+        (placePhotoRef.startsWith("https://storage.googleapis.com/") ||
+         placePhotoRef.startsWith("https://firebasestorage.googleapis.com/"))) {
+      try {
+        await bucket.file(`pairs/${pairId}/items/${itemId}.jpg`).delete();
+      } catch (e) {
+        console.warn(`onItemDeleted: place photo delete failed`, e);
+      }
     }
+
+    // userPhotos（ユーザーアップロード写真）を全件削除
+    const userPhotos: string[] = data.userPhotos ?? [];
+    await Promise.all(userPhotos.map(async (url: string) => {
+      const match = url.match(/\/o\/([^?]+)/);
+      if (!match) return;
+      try {
+        await bucket.file(decodeURIComponent(match[1])).delete();
+      } catch (e) {
+        console.warn(`onItemDeleted: user photo delete failed`, e);
+      }
+    }));
   }
 );
 

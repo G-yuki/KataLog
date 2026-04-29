@@ -8,6 +8,8 @@ import { Loading } from "../../../components/Loading";
 import { usePair } from "../../../contexts/PairContext";
 import { db } from "../../../firebase/firestore";
 import { doc, getDoc } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
+import { storage } from "../../../firebase/storage";
 import type { Item } from "../../../types";
 
 const MAPS_KEY = import.meta.env.VITE_MAPS_BROWSER_KEY as string;
@@ -45,6 +47,10 @@ export const ItemDetailPage = () => {
   const [completedAtDate, setCompletedAtDate] = useState("");
   const [completedAtHour, setCompletedAtHour] = useState(12);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [photosExpanded, setPhotosExpanded] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const enrichCalled = useRef(false);
 
   useEffect(() => {
@@ -160,6 +166,72 @@ export const ItemDetailPage = () => {
     if (!item) return;
     await removeItem(item.itemId);
     navigate(backTo, { replace: true });
+  };
+
+  const resizeImage = (file: File): Promise<Blob> =>
+    new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const maxPx = 1200;
+        const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(
+          (blob) => (blob ? resolve(blob) : reject(new Error("resize failed"))),
+          "image/jpeg",
+          0.8
+        );
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("load failed")); };
+      img.src = url;
+    });
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !pairId || !item) return;
+    setPhotoUploading(true);
+    try {
+      const blob = await resizeImage(file);
+      const uuid = crypto.randomUUID();
+      const storageRef = ref(storage, `pairs/${pairId}/items/${item.itemId}/${uuid}.jpg`);
+      await uploadBytes(storageRef, blob, { contentType: "image/jpeg" });
+      const url = await getDownloadURL(storageRef);
+      await saveDetail(item.itemId, { userPhotos: [...(item.userPhotos ?? []), url] });
+    } catch { /* silent — ユーザーは再試行可 */ }
+    finally { setPhotoUploading(false); }
+  };
+
+  const handlePhotoDelete = async (url: string) => {
+    if (!pairId || !item) return;
+    const match = url.match(/\/o\/([^?]+)/);
+    if (match) {
+      try { await deleteObject(ref(storage, decodeURIComponent(match[1]))); }
+      catch { /* 既に削除済みの場合も無視 */ }
+    }
+    await saveDetail(item.itemId, {
+      userPhotos: (item.userPhotos ?? []).filter((u) => u !== url),
+    });
+    setViewerIndex(null);
+  };
+
+  const handleBulkPhotoDelete = async () => {
+    if (!pairId || !item) return;
+    await Promise.all(
+      (item.userPhotos ?? []).map(async (url) => {
+        const match = url.match(/\/o\/([^?]+)/);
+        if (!match) return;
+        try { await deleteObject(ref(storage, decodeURIComponent(match[1]))); }
+        catch { /* ignore */ }
+      })
+    );
+    await saveDetail(item.itemId, { userPhotos: [] });
+    setShowBulkDeleteConfirm(false);
+    setPhotosExpanded(false);
   };
 
   if (loading || !pairId) return <Loading />;
@@ -495,6 +567,72 @@ export const ItemDetailPage = () => {
           )}
         </div>
 
+        {/* 写真 */}
+        {(() => {
+          const photos = item.userPhotos ?? [];
+          const displayed = photosExpanded ? photos : photos.slice(0, 3);
+          return (
+            <div className="card p-4 mb-4">
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                <p className="text-sm font-bold" style={{ color: "var(--color-text-main)" }}>写真</p>
+                <label style={{ cursor: photoUploading ? "default" : "pointer" }}>
+                  <input type="file" accept="image/*" style={{ display: "none" }}
+                         onChange={handlePhotoUpload} disabled={photoUploading} />
+                  <span style={{ fontSize: 12, fontWeight: 600,
+                                 color: photoUploading ? "var(--color-text-soft)" : "var(--color-primary)" }}>
+                    {photoUploading ? "アップロード中..." : "+ 追加"}
+                  </span>
+                </label>
+              </div>
+
+              {photos.length === 0 && !photoUploading ? (
+                <label style={{ cursor: "pointer", display: "flex", flexDirection: "column",
+                                alignItems: "center", justifyContent: "center", padding: "20px 0",
+                                border: "1.5px dashed var(--color-border)", borderRadius: 10, gap: 6 }}>
+                  <input type="file" accept="image/*" style={{ display: "none" }}
+                         onChange={handlePhotoUpload} disabled={photoUploading} />
+                  <span style={{ fontSize: 22 }}>📷</span>
+                  <span style={{ fontSize: 12, color: "var(--color-text-soft)" }}>写真を追加する</span>
+                </label>
+              ) : (
+                <>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
+                    {displayed.map((url, idx) => (
+                      <button key={url} onClick={() => setViewerIndex(photosExpanded ? idx : idx)}
+                              style={{ position: "relative", aspectRatio: "1", borderRadius: 8,
+                                       overflow: "hidden", border: "none", padding: 0, cursor: "pointer" }}>
+                        <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      </button>
+                    ))}
+                    {photoUploading && (
+                      <div style={{ aspectRatio: "1", borderRadius: 8, background: "rgba(0,0,0,0.06)",
+                                    display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <span style={{ fontSize: 20 }}>⏳</span>
+                      </div>
+                    )}
+                  </div>
+                  {!photosExpanded && photos.length > 3 && (
+                    <button onClick={() => setPhotosExpanded(true)}
+                            style={{ width: "100%", marginTop: 8, padding: "8px 0", fontSize: 12,
+                                     color: "var(--color-text-mid)", background: "none",
+                                     border: "1px solid var(--color-border)", borderRadius: 8, cursor: "pointer" }}>
+                      残り{photos.length - 3}枚を見る &gt;
+                    </button>
+                  )}
+                  {photos.length > 0 && (
+                    <button onClick={() => setShowBulkDeleteConfirm(true)}
+                            style={{ width: "100%", marginTop: 8, fontSize: 11,
+                                     color: "var(--color-text-soft)", background: "none",
+                                     border: "none", cursor: "pointer", textAlign: "right" }}>
+                      全ての写真を削除
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          );
+        })()}
+
         {/* 削除 */}
         <button
           onClick={() => setShowDeleteConfirm(true)}
@@ -505,6 +643,94 @@ export const ItemDetailPage = () => {
         </button>
       </div>
       </div>{/* /スクロールエリア */}
+
+      {/* フォトビューアー */}
+      {viewerIndex !== null && (() => {
+        const photos = item.userPhotos ?? [];
+        const url = photos[viewerIndex];
+        if (!url) return null;
+        return (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)",
+                        display: "flex", flexDirection: "column", zIndex: 200 }}>
+            {/* ヘッダー */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+                          padding: "16px 20px", flexShrink: 0 }}>
+              <button onClick={() => setViewerIndex(null)}
+                      style={{ background: "none", border: "none", color: "#fff",
+                               fontSize: 14, cursor: "pointer", padding: "4px 8px 4px 0" }}>
+                ✕ 閉じる
+              </button>
+              <span style={{ fontSize: 13, color: "rgba(255,255,255,0.6)" }}>
+                {viewerIndex + 1} / {photos.length}
+              </span>
+            </div>
+
+            {/* 写真 */}
+            <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
+                          padding: "0 16px" }}>
+              <img src={url} alt="" style={{ maxWidth: "100%", maxHeight: "100%",
+                                             objectFit: "contain", borderRadius: 8 }} />
+            </div>
+
+            {/* ナビゲーション＋削除 */}
+            <div style={{ flexShrink: 0, padding: "16px 20px 48px",
+                          display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+              <button onClick={() => setViewerIndex(Math.max(0, viewerIndex - 1))}
+                      disabled={viewerIndex === 0}
+                      style={{ background: "rgba(255,255,255,0.15)", border: "none", borderRadius: 8,
+                               color: "#fff", padding: "10px 20px", fontSize: 14, cursor: "pointer",
+                               opacity: viewerIndex === 0 ? 0.3 : 1 }}>
+                ‹ 前
+              </button>
+              <button onClick={() => handlePhotoDelete(url)}
+                      style={{ background: "#E53E3E", border: "none", borderRadius: 8,
+                               color: "#fff", padding: "10px 20px", fontSize: 13,
+                               fontWeight: 600, cursor: "pointer" }}>
+                この写真を削除
+              </button>
+              <button onClick={() => setViewerIndex(Math.min(photos.length - 1, viewerIndex + 1))}
+                      disabled={viewerIndex === photos.length - 1}
+                      style={{ background: "rgba(255,255,255,0.15)", border: "none", borderRadius: 8,
+                               color: "#fff", padding: "10px 20px", fontSize: 14, cursor: "pointer",
+                               opacity: viewerIndex === photos.length - 1 ? 0.3 : 1 }}>
+                次 ›
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* 写真一括削除確認 */}
+      {showBulkDeleteConfirm && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)",
+                      display: "flex", alignItems: "flex-end", zIndex: 150 }}
+             onClick={() => setShowBulkDeleteConfirm(false)}>
+          <div onClick={(e) => e.stopPropagation()}
+               style={{ width: "100%", background: "var(--color-bg)",
+                        borderRadius: "20px 20px 0 0", padding: "28px 20px 48px",
+                        display: "flex", flexDirection: "column", gap: 8,
+                        fontFamily: "var(--font-sans)" }}>
+            <p style={{ fontSize: 15, fontWeight: 600, color: "var(--color-text-main)", textAlign: "center" }}>
+              全ての写真を削除しますか？
+            </p>
+            <p style={{ fontSize: 12, color: "var(--color-text-soft)", textAlign: "center", marginBottom: 8 }}>
+              {item.userPhotos?.length ?? 0}枚の写真が削除されます
+            </p>
+            <button onClick={handleBulkPhotoDelete}
+                    style={{ width: "100%", padding: "14px", borderRadius: 12,
+                             background: "#E53E3E", color: "#fff", border: "none",
+                             fontSize: 15, fontWeight: 600, cursor: "pointer" }}>
+              削除する
+            </button>
+            <button onClick={() => setShowBulkDeleteConfirm(false)}
+                    style={{ width: "100%", padding: "14px", borderRadius: 12,
+                             background: "transparent", color: "var(--color-text-mid)",
+                             border: "1px solid var(--color-border)", fontSize: 15, cursor: "pointer" }}>
+              キャンセル
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 削除確認ダイアログ */}
       {showDeleteConfirm && (
