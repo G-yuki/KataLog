@@ -33,8 +33,10 @@ export const PrivacyPage = () => {
           <ul style={{ marginTop: 8, paddingLeft: 20, lineHeight: 2 }}>
             <li>Googleアカウントの基本情報（メールアドレス、UID）</li>
             <li>ユーザーが入力したニックネーム</li>
-            <li>ペアで作成したアイテムリスト・体験記録</li>
+            <li>ペアで作成したアイテムリスト・体験記録（メモ・評価・完了日時など）</li>
             <li>ヒアリング回答（趣味嗜好など）</li>
+            <li>ユーザーが任意でアップロードした写真ファイル</li>
+            <li>体験スポットに関するGoogle Places情報（場所名・写真・位置情報）</li>
           </ul>
         </LegalSection>
 
@@ -44,7 +46,15 @@ export const PrivacyPage = () => {
             <li>本サービスの提供・維持・改善</li>
             <li>AIによる体験提案・思い出文章の生成</li>
             <li>ペアマッチング機能の提供</li>
+            <li>アイテムへの写真添付・思い出の記録・ペア間での共有</li>
+            <li>スポット情報の自動取得・地図表示</li>
           </ul>
+        </LegalSection>
+
+        <LegalSection title="ペア間でのデータ共有">
+          本サービスはカップル・夫婦2名1組（ペア）での利用を前提としています。
+          アイテムリスト・メモ・評価・アップロードした写真など、ペア内で入力した情報は
+          パートナーと共有されます。ペアを解消した後も、データはサービス内に残る場合があります。
         </LegalSection>
 
         <LegalSection title="第三者への提供">
@@ -58,15 +68,18 @@ export const PrivacyPage = () => {
         <LegalSection title="外部サービスの利用">
           本サービスは以下の外部サービスを利用しています。
           <ul style={{ marginTop: 8, paddingLeft: 20, lineHeight: 2 }}>
-            <li>Firebase（Google LLC）— 認証・データベース・ホスティング</li>
+            <li>Firebase Authentication / Firestore / Hosting（Google LLC）— 認証・データベース・ホスティング</li>
+            <li>Firebase Storage（Google LLC）— ユーザーがアップロードした写真ファイルの保存</li>
+            <li>Google Places API（Google LLC）— スポット情報・写真・位置情報の取得</li>
             <li>Gemini API（Google LLC）— AI体験提案・思い出生成</li>
           </ul>
           各サービスのプライバシーポリシーについては各社のウェブサイトをご確認ください。
         </LegalSection>
 
         <LegalSection title="データの保管と削除">
-          収集したデータはFirestoreに保存されます。
-          アカウント削除をご希望の場合は、お問い合わせフォームよりご連絡ください。
+          テキストデータはFirestoreに、写真ファイルはFirebase Storage（asia-northeast1）に保存されます。
+          アイテムを削除した場合、そのアイテムに紐づく写真ファイルも自動的に削除されます。
+          アカウント削除・全データの削除をご希望の場合は、設定画面のお問い合わせよりご連絡ください。
         </LegalSection>
 
         <LegalSection title="ポリシーの変更">
