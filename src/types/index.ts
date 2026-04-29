@@ -69,6 +69,7 @@ export interface Item {
   lat: number | null;
   lng: number | null;
   userPlaceUrl?: string | null;
+  userPhotos?: string[];        // ユーザーアップロード写真のStorage URL配列
 }
 
 // AI生成時のアイテム（Firestore保存前）
