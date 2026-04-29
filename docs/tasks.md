@@ -1,6 +1,6 @@
 # lifrave 残タスク進捗管理
 
-最終更新: 2026-04-24
+最終更新: 2026-04-29
 
 ## ステータス凡例
 - ⬜ 未着手
@@ -28,6 +28,14 @@
 | ⑧ | ニックネーム画面リデザイン（絵文字除去・ロゴ＋シンプル） | 2026-04-23 |
 | ⑨ | スワイプ: key={index} でスライドバック廃止 | 2026-04-23 |
 | suggest1 | 全国選択時CF修正・Places検索/AIプロンプトを全国対象に | 2026-04-24 |
+| home修正 | フィルタをtryItemsに適用・カテゴリ外出表示・GoodCardにカテゴリ追加・★バッジ削除 | 2026-04-25 |
+| 削除UI | home/詳細画面の削除確認をカスタムボトムシートに変更（window.confirm廃止） | 2026-04-25 |
+| suggest2 | 全国トグルで range:"anywhere" も同時セット・CF areaNote undefined修正 | 2026-04-25 |
+| memory絵文字 | フォールバック📍→✨・CF プロンプトに絵文字例追加・日本語テキスト誤出力を✨に補正 | 2026-04-25 |
+| enrich最適化 | placeId===nullのときだけenrichItem呼び出し・失敗時は自動リトライ | 2026-04-25 |
+| cost最適化 | enrichPairItems削除（未使用CF）・URL重複保存時のenrich呼び出し抑制 | 2026-04-29 |
+| Essentials化 | enrichItem FieldMaskからplaces.photos除去→Text Search Essentials化（無料枠1K→10K・単価1/12） | 2026-04-29 |
+| spec統合 | spec.md完全リライト・specs.md削除（API仕様・コスト・既知課題を1ファイルに統合） | 2026-04-29 |
 
 ---
 
@@ -37,10 +45,21 @@
 |---|------|-----------|------|
 | suggest1 | 全国選択時に都道府県のみ検索される問題（CF側修正） | ✅ | 2026-04-24 デプロイ済み |
 | 地図共有 | 行った場所をマップ表示・URL共有（軽量公開ページ＋publicToken方式） | ⬜ | 設計は確定。Maps JS API $7/1,000loads |
+| memory要約UI | 「ふたりのN期」要約UI（ベスト体験+ジャンル別バーグラフ） | ⬜ | 設計検討中 |
+| 写真アップロード | 詳細画面からユーザー写真をアップロード・表示 | ⬜ | 設計・コスト試算完了（cost-strategy.md §8） |
 
 ---
 
 ## 設計メモ
+
+### 写真アップロード機能
+- データモデル: `userPhotos: string[]`（Storage URL 配列をアイテムドキュメントに保存）
+- Storage パス: `pairs/{pairId}/items/{itemId}/{uuid}.jpg`
+- 表示: メモ・日記の下に配置。最初の3枚を自動ロード、「>」ボタンで追加ロード（lazy）
+- クライアント側 1,200px リサイズ（JPEG 80%）必須
+- アップロードと削除のみ（カメラロール保存ボタンなし）
+- アイテム削除時に `onItemDeleted` CF で Storage ファイルも連動削除
+- コスト: 740ペアまで無料枠内。3,000ペアで写真DL+Storage ~$11.6/月追加（詳細は cost-strategy.md §8）
 
 ### 地図共有機能
 - 方式: publicToken（UUIDv4）を pairs コレクションに保存

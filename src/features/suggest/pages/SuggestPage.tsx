@@ -542,9 +542,9 @@ const UpdateHearingForm = ({
                 selected={hearing.prefecture === "全国"}
                 onClick={() => {
                   if (hearing.prefecture === "全国") {
-                    onChange({ ...hearing, prefecture: undefined });
+                    onChange({ ...hearing, prefecture: undefined, range: undefined });
                   } else {
-                    onChange({ ...hearing, prefecture: "全国", range: undefined });
+                    onChange({ ...hearing, prefecture: "全国", range: "anywhere" });
                   }
                 }}
               >

@@ -35,6 +35,7 @@ export const HomePage = () => {
   const [doneOpen, setDoneOpen] = useState(false);
   const [showGuide, setShowGuide] = useState(() => !localStorage.getItem("homeGuideSeen"));
   const [guideDetailOpen, setGuideDetailOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
 
   const applySearch = (arr: Item[]): Item[] => {
@@ -150,7 +151,8 @@ export const HomePage = () => {
   const sortedGoItems   = applySearch(goItems);
   const sortedGoodBase  = filter === "all" ? goodItems : goodItems.filter((i) => i.category === filter);
   const filteredGood    = applySearch(sortedGoodBase);
-  const filteredTry     = applySearch(tryItems);
+  const filteredTryBase = filter === "all" ? tryItems : tryItems.filter((i) => i.category === filter);
+  const filteredTry     = applySearch(filteredTryBase);
 
   const progress = items.length > 0 ? doneItems.length / items.length : 0;
 
@@ -260,7 +262,7 @@ export const HomePage = () => {
                         onClick={() => navigateToDetail(item.itemId)}
                         onDone={() => setStatus(item.itemId, "done")}
                         onWant={() => toggleIsWant(item.itemId, item.isWant)}
-                        onDelete={() => removeItem(item.itemId)} />
+                        onDelete={() => setDeleteTarget(item.itemId)} />
               ))}
             </div>
           </div>
@@ -278,7 +280,7 @@ export const HomePage = () => {
                             onTap={() => navigateToDetail(item.itemId)}
                             onWant={() => toggleIsWant(item.itemId, item.isWant)}
                             onDone={() => setStatus(item.itemId, "done")}
-                            onDelete={() => removeItem(item.itemId)} />
+                            onDelete={() => setDeleteTarget(item.itemId)} />
                 ))}
               </div>
             </>
@@ -307,7 +309,7 @@ export const HomePage = () => {
                           onTap={() => navigateToDetail(item.itemId)}
                           onWant={() => toggleIsWant(item.itemId, item.isWant)}
                           onDone={() => setStatus(item.itemId, "done")}
-                          onDelete={() => removeItem(item.itemId)} />
+                          onDelete={() => setDeleteTarget(item.itemId)} />
               ))}
             </div>
           </div>
@@ -366,7 +368,7 @@ export const HomePage = () => {
                        background: "#fff", color: "var(--color-primary)",
                        border: "2px solid var(--color-primary)",
                        fontSize: 26, cursor: "pointer",
-                       boxShadow: "0 4px 16px rgba(0,0,0,0.18)",
+                       boxShadow: "0 4px 16px rgba(139, 139, 139, 0.2)",
                        display: "flex", alignItems: "center", justifyContent: "center" }}>
         +
       </button>
@@ -384,6 +386,42 @@ export const HomePage = () => {
             detailReady={guideDetailOpen}
           />
         </>
+      )}
+
+      {/* ── 削除確認ダイアログ ── */}
+      {deleteTarget && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)",
+                      display: "flex", alignItems: "flex-end", zIndex: 150 }}
+             onClick={() => setDeleteTarget(null)}>
+          <div onClick={(e) => e.stopPropagation()}
+               style={{ width: "100%", background: "var(--color-bg)",
+                        borderRadius: "20px 20px 0 0", padding: "28px 20px 48px",
+                        display: "flex", flexDirection: "column", gap: 8 }}>
+            <p style={{ fontSize: 15, fontWeight: 600, color: "var(--color-text-main)",
+                        textAlign: "center", fontFamily: "var(--font-sans)" }}>
+              このアイテムを削除しますか？
+            </p>
+            <p style={{ fontSize: 12, color: "var(--color-text-soft)",
+                        textAlign: "center", fontFamily: "var(--font-sans)", marginBottom: 8 }}>
+              削除すると元に戻せません
+            </p>
+            <button onClick={() => { removeItem(deleteTarget); setDeleteTarget(null); }}
+                    style={{ width: "100%", padding: "14px", borderRadius: 12,
+                             background: "#E53E3E", color: "#fff", border: "none",
+                             fontSize: 15, fontWeight: 600, cursor: "pointer",
+                             fontFamily: "var(--font-sans)" }}>
+              削除する
+            </button>
+            <button onClick={() => setDeleteTarget(null)}
+                    style={{ width: "100%", padding: "14px", borderRadius: 12,
+                             background: "transparent", color: "var(--color-text-mid)",
+                             border: "1px solid var(--color-border)",
+                             fontSize: 15, cursor: "pointer",
+                             fontFamily: "var(--font-sans)" }}>
+              キャンセル
+            </button>
+          </div>
+        </div>
       )}
 
       {/* ── 手動追加モーダル ── */}
@@ -649,14 +687,6 @@ const GoCard = ({ item, onClick, onDone, onWant, onDelete }:
       <div style={{ position: "absolute", inset: 0,
                     background: "linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, transparent 40%, rgba(0,0,0,0.7) 100%)",
                     pointerEvents: "none" }} />
-      {/* Google評価バッジ（左上） */}
-      {item.placeRating != null && (
-        <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(0,0,0,0.5)",
-                      color: "#fff", fontSize: 9, padding: "2px 6px", borderRadius: 20,
-                      display: "flex", alignItems: "center", gap: 2, zIndex: 2 }}>
-          <span style={{ color: "#F5C842" }}>★</span>{item.placeRating.toFixed(1)}
-        </div>
-      )}
       {/* ✓ 完了ボタン（右上） */}
       <button onClick={(e) => { e.stopPropagation(); onDone(); }}
               style={{ position: "absolute", top: 7, right: 7.5, zIndex: 3,
@@ -682,7 +712,7 @@ const GoCard = ({ item, onClick, onDone, onWant, onDelete }:
         <div style={{ fontSize: 9, letterSpacing: "0.08em",
                       color: "rgba(255,255,255,0.7)", fontFamily: "var(--font-sans)",
                       marginBottom: 3 }}>
-          {item.category}
+          {item.category === "おでかけ" ? "外出" : item.category}
         </div>
         <p style={{ fontSize: 10, fontWeight: 500, color: "#fff", lineHeight: 1.35,
                     fontFamily: "var(--font-sans)", margin: 0,
@@ -752,17 +782,14 @@ const GoodCard = ({ item, onTap, onWant, onDone, onDelete }:
                        lineHeight: 1, padding: 0 }}>
         ×
       </button>
-      {/* Google評価バッジ（左上、写真ありかつGoCardの評価なし場合のみ） */}
-      {item.placeRating != null && (
-        <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(0,0,0,0.5)",
-                      color: "#fff", fontSize: 9, padding: "2px 6px", borderRadius: 20,
-                      display: "flex", alignItems: "center", gap: 2, zIndex: 2 }}>
-          <span style={{ color: "#F5C842" }}>★</span>{item.placeRating.toFixed(1)}
-        </div>
-      )}
-      {/* タイトル（下部） */}
+      {/* タイトル・カテゴリ（下部） */}
       <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 2,
                     padding: "8px 28px 9px 10px", textAlign: "left" }}>
+        <div style={{ fontSize: 9, letterSpacing: "0.08em",
+                      color: "rgba(255,255,255,0.7)", fontFamily: "var(--font-sans)",
+                      marginBottom: 3 }}>
+          {item.category === "おでかけ" ? "外出" : item.category}
+        </div>
         <p style={{ fontSize: 10, fontWeight: 500, color: "#fff", lineHeight: 1.35,
                     fontFamily: "var(--font-sans)", margin: 0,
                     display: "-webkit-box", WebkitLineClamp: 1,

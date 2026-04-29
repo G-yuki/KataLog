@@ -150,7 +150,10 @@ export const MemoryPage = () => {
         period: getAiLabel(startMonth, endMonth),
       });
       // AI が絵文字プレースホルダーをそのまま出力した場合のフォールバック
-      const raw = result.data.memory.replace(/\[体験に合う絵文字\]/g, "📍");
+      const raw = result.data.memory
+        .replace(/\[体験に合う絵文字\]/g, "✨")
+        // AIが絵文字位置に日本語テキストを出した場合（例: "もんじゃ【食事】..."）→ ✨ に置換
+        .replace(/^[぀-鿿]{1,8}(?=【)/gm, "✨");
       setMemory(raw);
     } catch {
       setGenError("生成に失敗しました。もう一度お試しください。");

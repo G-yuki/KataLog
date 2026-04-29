@@ -80,12 +80,12 @@ export const generateItems = onCall(
   const overseasNote = hearing.overseas
     ? `\n- 旅行先：${hearing.overseas}（海外旅行プラン）`
     : "";
-  const areaDisplay = hearing.range === "anywhere"
-    ? "全国"
-    : (hearing.prefecture || "未指定");
+  const isZenkoku = hearing.range === "anywhere" || hearing.prefecture === "全国";
+  const areaDisplay = isZenkoku ? "全国" : (hearing.prefecture || "未指定");
+  const areaRangeLabel = isZenkoku ? "全国" : (rangeLabel[hearing.range] ?? hearing.range ?? "");
   const areaNote = hearing.overseas
     ? ""
-    : `- 活動エリア：${areaDisplay}（${rangeLabel[hearing.range] ?? hearing.range}）\n`;
+    : `- 活動エリア：${areaDisplay}（${areaRangeLabel}）\n`;
 
   const prompt = `あなたはカップル・夫婦向けの体験提案AIです。
 以下のヒアリング結果をもとに、このカップルにぴったりな「やりたいこと」リストを50件生成してください。
@@ -234,7 +234,8 @@ ${todoList}
 - メモがない体験は評価とカテゴリだけで描写する
 - 感情的・詩的な表現を意識する
 - 「ふたり」という言葉を軸に書く
-- フォーマット通りに出力する。それ以外は何も書かない`;
+- フォーマット通りに出力する。それ以外は何も書かない
+- [体験に合う絵文字]には必ずUnicode絵文字を1文字入れること（例：食事→🍽️、おでかけ→🗺️、映画→🎬、本→📚、ゲーム→🎮、音楽→🎧、スポーツ→🏃）。日本語テキストや記号は不可`;
 
     try {
       const genAI = new GoogleGenerativeAI(geminiApiKey.value());
@@ -249,9 +250,6 @@ ${todoList}
     }
   }
 );
-
-// ── 対象カテゴリ ────────────────────────────────────────────
-const PLACE_CATEGORIES = ["おでかけ", "食事", "スポーツ", "映画", "音楽"];
 
 // ── URL リダイレクト解決 + 場所名抽出 ────────────────────────
 const resolvePlaceNameFromUrl = async (url: string): Promise<string | null> => {
@@ -298,12 +296,13 @@ export const enrichItem = onCall(
       : (prefecture ? `${resolvedTitle} ${prefecture}` : resolvedTitle);
 
     try {
-      const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
+      // Step 1: Text Search（Essentials tier — places.photos を除外）
+      const searchRes = await fetch("https://places.googleapis.com/v1/places:searchText", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "X-Goog-Api-Key": mapsServerKey.value(),
-          "X-Goog-FieldMask": "places.id,places.photos,places.location",
+          "X-Goog-FieldMask": "places.id,places.location",
         },
         body: JSON.stringify({
           textQuery,
@@ -313,23 +312,37 @@ export const enrichItem = onCall(
         }),
       });
 
-      const data = await res.json() as {
+      const searchData = await searchRes.json() as {
         places?: Array<{
           id: string;
-          photos?: Array<{ name: string }>;
           location?: { latitude: number; longitude: number };
         }>;
       };
 
-      const candidates = (data.places ?? []).filter((p) => p.photos && p.photos.length > 0);
-      const place = candidates[0] ?? null;
+      const place = searchData.places?.[0] ?? null;
+
+      // Step 2: Place Details Photos（Enterprise tier — placeId が取れた場合のみ）
+      let photoRef: string | null = null;
+      if (place?.id) {
+        const detailRes = await fetch(
+          `https://places.googleapis.com/v1/places/${place.id}`,
+          {
+            headers: {
+              "X-Goog-Api-Key": mapsServerKey.value(),
+              "X-Goog-FieldMask": "photos",
+            },
+          }
+        );
+        const detailData = await detailRes.json() as { photos?: Array<{ name: string }> };
+        photoRef = detailData.photos?.[0]?.name ?? null;
+      }
 
       // placeId を "" にすることで「検索済みだが未発見」を表し、再呼び出しを防ぐ
       await admin.firestore()
         .doc(`pairs/${pairId}/items/${itemId}`)
         .update({
           placeId:       place?.id ?? "",
-          placePhotoRef: place?.photos?.[0]?.name ?? null,
+          placePhotoRef: photoRef,
           lat:           place?.location?.latitude ?? null,
           lng:           place?.location?.longitude ?? null,
         });
@@ -341,97 +354,6 @@ export const enrichItem = onCall(
       console.error("enrichItem error:", msg);
       throw new HttpsError("internal", `エンリッチエラー: ${msg}`);
     }
-  }
-);
-
-// ── ペア全件バックグラウンドエンリッチ ────────────────────────────────
-export const enrichPairItems = onCall(
-  { invoker: "public", secrets: [mapsServerKey], enforceAppCheck: false, timeoutSeconds: 300 },
-  async (request) => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "ログインが必要です。");
-    }
-
-    const { pairId } = request.data as { pairId: string };
-    if (!pairId) {
-      throw new HttpsError("invalid-argument", "pairId が必要です。");
-    }
-
-    // prefecture を取得（全国選択時は付けない）
-    const pairSnap = await admin.firestore().doc(`pairs/${pairId}`).get();
-    const hearing = pairSnap.exists ? pairSnap.data()?.hearing : undefined;
-    const prefecture = hearing?.range === "anywhere"
-      ? undefined
-      : (hearing?.prefecture as string | undefined);
-
-    // placeId === null かつ対象カテゴリのアイテムを全件取得
-    const itemsSnap = await admin.firestore()
-      .collection(`pairs/${pairId}/items`)
-      .where("placeId", "==", null)
-      .get();
-
-    const targets = itemsSnap.docs.filter((d) =>
-      PLACE_CATEGORIES.includes(d.data().category as string)
-    );
-
-    let enriched = 0;
-
-    for (const docSnap of targets) {
-      const { title, matchTier } = docSnap.data() as { title: string; matchTier?: string };
-
-      // try アイテムはスキップ（詳細画面を開いたときに lazy enrich）
-      if (matchTier === "try") {
-        await new Promise((r) => setTimeout(r, 50));
-        continue;
-      }
-
-      const textQuery = prefecture ? `${title} ${prefecture}` : title;
-
-      try {
-        const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Goog-Api-Key": mapsServerKey.value(),
-            "X-Goog-FieldMask": "places.id,places.photos,places.location",
-          },
-          body: JSON.stringify({
-            textQuery,
-            languageCode: "ja",
-            minRating: 3.5,
-            pageSize: 5,
-          }),
-        });
-
-        const data = await res.json() as {
-          places?: Array<{
-            id: string;
-            photos?: Array<{ name: string }>;
-            location?: { latitude: number; longitude: number };
-          }>;
-        };
-
-        const candidates = (data.places ?? []).filter((p) => p.photos && p.photos.length > 0);
-        const place = candidates[0] ?? null;
-
-        await docSnap.ref.update({
-          placeId:       place?.id ?? "",
-          placePhotoRef: place?.photos?.[0]?.name ?? null,
-          lat:           place?.location?.latitude ?? null,
-          lng:           place?.location?.longitude ?? null,
-        });
-
-        enriched++;
-      } catch (e) {
-        console.error(`enrichPairItems: failed for ${docSnap.id}`, e);
-        // 1件失敗しても続行
-      }
-
-      // レート制限対策
-      await new Promise((r) => setTimeout(r, 200));
-    }
-
-    return { enriched };
   }
 );
 
