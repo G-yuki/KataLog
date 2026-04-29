@@ -61,13 +61,15 @@
 - アイテム削除時に `onItemDeleted` CF で Storage ファイルも連動削除
 - コスト: 740ペアまで無料枠内。3,000ペアで写真DL+Storage ~$11.6/月追加（詳細は cost-strategy.md §8）
 
-#### 写真セキュリティ・UX強化（対応中）
-- [ ] アップロードバリデーション: MIME type + 拡張子 + img.onload（.exe偽装対策）
-- [ ] HEIC除外: MIMEリストから除外。Android Chromeで読み込み失敗時はSafariで開くよう案内
-- [ ] CDNキャッシュ: `uploadBytes` に `cacheControl: "public, max-age=31536000"` 追加
-- [ ] Lazy Load: 写真グリッド・ビューアーの `<img>` に `loading="lazy"` 追加
-- [ ] 写真枚数上限: 1アイテム最大20枚（クライアント側チェック）
-- [ ] プライバシーポリシー・利用規約を写真アップロード対応に更新
+#### 写真セキュリティ・UX強化
+- [x] アップロードバリデーション: MIME type + 拡張子 + img.onload（.exe偽装対策）
+- [x] HEIC除外: MIMEリストから除外。iOS Safari以外でのHEIC失敗時にSafari案内を表示
+- [x] CDNキャッシュ: `uploadBytes` に `cacheControl: "public, max-age=31536000"` 追加
+- [x] Lazy Load: 写真グリッド・ビューアーの `<img>` に `loading="lazy"` 追加
+- [x] 写真枚数上限: 1アイテム最大20枚（クライアント側チェック）
+- [x] プライバシーポリシー・利用規約を写真アップロード対応に更新
+- [ ] 写真個別削除: ビューアー内に削除前確認を追加
+- [ ] UI区別: 「全ての写真を削除」と「このアイテムを削除」の混同を防ぐセパレーター追加
 
 ### 地図共有機能
 - 方式: publicToken（UUIDv4）を pairs コレクションに保存

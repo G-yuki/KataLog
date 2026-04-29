@@ -54,6 +54,7 @@ export const ItemDetailPage = () => {
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [photosExpanded, setPhotosExpanded] = useState(false);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const [showPhotoDeleteConfirm, setShowPhotoDeleteConfirm] = useState(false);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const enrichCalled = useRef(false);
 
@@ -684,14 +685,16 @@ export const ItemDetailPage = () => {
           );
         })()}
 
-        {/* 削除 */}
-        <button
-          onClick={() => setShowDeleteConfirm(true)}
-          className="text-sm text-center mt-4 w-full"
-          style={{ color: "var(--color-text-soft)" }}
-        >
-          このアイテムを削除する
-        </button>
+        {/* アイテム削除 */}
+        <div style={{ borderTop: "1px solid var(--color-border)", margin: "24px 0 0", paddingTop: 16 }}>
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            className="text-sm text-center w-full"
+            style={{ color: "var(--color-text-soft)" }}
+          >
+            このアイテムを削除する
+          </button>
+        </div>
       </div>
       </div>{/* /スクロールエリア */}
 
@@ -706,7 +709,7 @@ export const ItemDetailPage = () => {
             {/* ヘッダー */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
                           padding: "16px 20px", flexShrink: 0 }}>
-              <button onClick={() => setViewerIndex(null)}
+              <button onClick={() => { setViewerIndex(null); setShowPhotoDeleteConfirm(false); }}
                       style={{ background: "none", border: "none", color: "#fff",
                                fontSize: 14, cursor: "pointer", padding: "4px 8px 4px 0" }}>
                 ✕ 閉じる
@@ -724,29 +727,50 @@ export const ItemDetailPage = () => {
             </div>
 
             {/* ナビゲーション＋削除 */}
-            <div style={{ flexShrink: 0, padding: "16px 20px 48px",
-                          display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-              <button onClick={() => setViewerIndex(Math.max(0, viewerIndex - 1))}
-                      disabled={viewerIndex === 0}
-                      style={{ background: "rgba(255,255,255,0.15)", border: "none", borderRadius: 8,
-                               color: "#fff", padding: "10px 20px", fontSize: 14, cursor: "pointer",
-                               opacity: viewerIndex === 0 ? 0.3 : 1 }}>
-                ‹ 前
-              </button>
-              <button onClick={() => handlePhotoDelete(url)}
-                      style={{ background: "#E53E3E", border: "none", borderRadius: 8,
-                               color: "#fff", padding: "10px 20px", fontSize: 13,
-                               fontWeight: 600, cursor: "pointer" }}>
-                この写真を削除
-              </button>
-              <button onClick={() => setViewerIndex(Math.min(photos.length - 1, viewerIndex + 1))}
-                      disabled={viewerIndex === photos.length - 1}
-                      style={{ background: "rgba(255,255,255,0.15)", border: "none", borderRadius: 8,
-                               color: "#fff", padding: "10px 20px", fontSize: 14, cursor: "pointer",
-                               opacity: viewerIndex === photos.length - 1 ? 0.3 : 1 }}>
-                次 ›
-              </button>
-            </div>
+            {showPhotoDeleteConfirm ? (
+              <div style={{ flexShrink: 0, padding: "16px 20px 48px",
+                            display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+                <p style={{ fontSize: 14, color: "#fff", marginBottom: 4 }}>この写真を削除しますか？</p>
+                <div style={{ display: "flex", gap: 12, width: "100%" }}>
+                  <button onClick={() => setShowPhotoDeleteConfirm(false)}
+                          style={{ flex: 1, padding: "12px 0", borderRadius: 10,
+                                   background: "rgba(255,255,255,0.15)", border: "none",
+                                   color: "#fff", fontSize: 14, cursor: "pointer" }}>
+                    キャンセル
+                  </button>
+                  <button onClick={() => { setShowPhotoDeleteConfirm(false); handlePhotoDelete(url); }}
+                          style={{ flex: 1, padding: "12px 0", borderRadius: 10,
+                                   background: "#E53E3E", border: "none",
+                                   color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+                    削除する
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ flexShrink: 0, padding: "16px 20px 48px",
+                            display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                <button onClick={() => { setViewerIndex(Math.max(0, viewerIndex - 1)); setShowPhotoDeleteConfirm(false); }}
+                        disabled={viewerIndex === 0}
+                        style={{ background: "rgba(255,255,255,0.15)", border: "none", borderRadius: 8,
+                                 color: "#fff", padding: "10px 20px", fontSize: 14, cursor: "pointer",
+                                 opacity: viewerIndex === 0 ? 0.3 : 1 }}>
+                  ‹ 前
+                </button>
+                <button onClick={() => setShowPhotoDeleteConfirm(true)}
+                        style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,100,100,0.6)",
+                                 borderRadius: 8, color: "#ff8080", padding: "10px 20px",
+                                 fontSize: 13, cursor: "pointer" }}>
+                  この写真を削除
+                </button>
+                <button onClick={() => { setViewerIndex(Math.min(photos.length - 1, viewerIndex + 1)); setShowPhotoDeleteConfirm(false); }}
+                        disabled={viewerIndex === photos.length - 1}
+                        style={{ background: "rgba(255,255,255,0.15)", border: "none", borderRadius: 8,
+                                 color: "#fff", padding: "10px 20px", fontSize: 14, cursor: "pointer",
+                                 opacity: viewerIndex === photos.length - 1 ? 0.3 : 1 }}>
+                  次 ›
+                </button>
+              </div>
+            )}
           </div>
         );
       })()}
