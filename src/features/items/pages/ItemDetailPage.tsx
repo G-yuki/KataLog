@@ -14,6 +14,9 @@ import type { Item } from "../../../types";
 
 const MAPS_KEY = import.meta.env.VITE_MAPS_BROWSER_KEY as string;
 const PLACE_CATEGORIES = ["おでかけ", "食事", "スポーツ", "映画", "音楽"] as const;
+const MAX_PHOTOS = 20;
+const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
+const ALLOWED_EXT  = new Set(["jpg", "jpeg", "png", "gif", "webp"]);
 
 // Storage URL はそのまま、旧形式（Places photo参照名）は API 経由で取得
 const photoUrl = (photoRef: string) =>
@@ -48,6 +51,7 @@ export const ItemDetailPage = () => {
   const [completedAtHour, setCompletedAtHour] = useState(12);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [photoUploading, setPhotoUploading] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
   const [photosExpanded, setPhotosExpanded] = useState(false);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
@@ -168,13 +172,32 @@ export const ItemDetailPage = () => {
     navigate(backTo, { replace: true });
   };
 
-  const resizeImage = (file: File): Promise<Blob> =>
+  const validateImageFile = (file: File): Promise<void> =>
+    new Promise((resolve, reject) => {
+      if (!ALLOWED_MIME.has(file.type)) { reject(new Error("unsupported_type")); return; }
+      const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+      if (!ALLOWED_EXT.has(ext)) { reject(new Error("unsupported_type")); return; }
+      // 実際に画像として読み込めるか確認（.exe偽装対策）
+      const img = new Image();
+      const objUrl = URL.createObjectURL(file);
+      img.onload = () => { URL.revokeObjectURL(objUrl); resolve(); };
+      img.onerror = () => {
+        URL.revokeObjectURL(objUrl);
+        // HEICなど非対応フォーマットはSafari案内
+        const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent);
+        const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+        reject(new Error(isIOS && !isSafari ? "use_safari" : "not_image"));
+      };
+      img.src = objUrl;
+    });
+
+  const resizeImage = (source: File | Blob, maxPx: number): Promise<Blob> =>
     new Promise((resolve, reject) => {
       const img = new Image();
-      const url = URL.createObjectURL(file);
+      const objUrl = URL.createObjectURL(source);
       img.onload = () => {
-        URL.revokeObjectURL(url);
-        const maxPx = 1200;
+        URL.revokeObjectURL(objUrl);
+        // Canvas経由でリサイズするとEXIF（位置情報等）は自動除去される
         const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
         const canvas = document.createElement("canvas");
         canvas.width = Math.round(img.width * scale);
@@ -186,24 +209,41 @@ export const ItemDetailPage = () => {
           0.8
         );
       };
-      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("load failed")); };
-      img.src = url;
+      img.onerror = () => { URL.revokeObjectURL(objUrl); reject(new Error("load failed")); };
+      img.src = objUrl;
     });
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file || !pairId || !item) return;
+    if ((item.userPhotos ?? []).length >= MAX_PHOTOS) {
+      setPhotoError(`写真は最大${MAX_PHOTOS}枚までです`);
+      return;
+    }
+    setPhotoError(null);
     setPhotoUploading(true);
     try {
-      const blob = await resizeImage(file);
+      await validateImageFile(file);
+      const blob = await resizeImage(file, 1200);
       const uuid = crypto.randomUUID();
       const storageRef = ref(storage, `pairs/${pairId}/items/${item.itemId}/${uuid}.jpg`);
-      await uploadBytes(storageRef, blob, { contentType: "image/jpeg" });
+      await uploadBytes(storageRef, blob, {
+        contentType: "image/jpeg",
+        cacheControl: "public, max-age=31536000",
+      });
       const url = await getDownloadURL(storageRef);
       await saveDetail(item.itemId, { userPhotos: [...(item.userPhotos ?? []), url] });
-    } catch { /* silent — ユーザーは再試行可 */ }
-    finally { setPhotoUploading(false); }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "";
+      if (msg === "use_safari") {
+        setPhotoError("この写真形式はSafariでのみ対応しています。Safariで開いて再度お試しください。");
+      } else if (msg === "unsupported_type" || msg === "not_image") {
+        setPhotoError("対応していないファイルです。JPEG・PNG・WebP形式の写真を選択してください。");
+      }
+    } finally {
+      setPhotoUploading(false);
+    }
   };
 
   const handlePhotoDelete = async (url: string) => {
@@ -570,26 +610,33 @@ export const ItemDetailPage = () => {
         {/* 写真 */}
         {(() => {
           const photos = item.userPhotos ?? [];
-          const displayed = photosExpanded ? photos : photos.slice(0, 3);
+          const canAdd = photos.length < MAX_PHOTOS;
+          const displayed = photosExpanded ? photos : photos.slice(0, 6);
           return (
             <div className="card p-4 mb-4">
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                <p className="text-sm font-bold" style={{ color: "var(--color-text-main)" }}>写真</p>
-                <label style={{ cursor: photoUploading ? "default" : "pointer" }}>
-                  <input type="file" accept="image/*" style={{ display: "none" }}
-                         onChange={handlePhotoUpload} disabled={photoUploading} />
-                  <span style={{ fontSize: 12, fontWeight: 600,
-                                 color: photoUploading ? "var(--color-text-soft)" : "var(--color-primary)" }}>
-                    {photoUploading ? "アップロード中..." : "+ 追加"}
-                  </span>
-                </label>
+                <p className="text-sm font-bold" style={{ color: "var(--color-text-main)" }}>
+                  写真{photos.length > 0 && <span style={{ fontWeight: 400, fontSize: 11, color: "var(--color-text-soft)", marginLeft: 6 }}>{photos.length}/{MAX_PHOTOS}</span>}
+                </p>
+                {canAdd && (
+                  <label style={{ cursor: photoUploading ? "default" : "pointer" }}>
+                    <input type="file" accept="image/jpeg,image/png,image/gif,image/webp"
+                           style={{ display: "none" }}
+                           onChange={handlePhotoUpload} disabled={photoUploading} />
+                    <span style={{ fontSize: 12, fontWeight: 600,
+                                   color: photoUploading ? "var(--color-text-soft)" : "var(--color-primary)" }}>
+                      {photoUploading ? "アップロード中..." : "+ 追加"}
+                    </span>
+                  </label>
+                )}
               </div>
 
               {photos.length === 0 && !photoUploading ? (
                 <label style={{ cursor: "pointer", display: "flex", flexDirection: "column",
                                 alignItems: "center", justifyContent: "center", padding: "20px 0",
                                 border: "1.5px dashed var(--color-border)", borderRadius: 10, gap: 6 }}>
-                  <input type="file" accept="image/*" style={{ display: "none" }}
+                  <input type="file" accept="image/jpeg,image/png,image/gif,image/webp"
+                         style={{ display: "none" }}
                          onChange={handlePhotoUpload} disabled={photoUploading} />
                   <span style={{ fontSize: 22 }}>📷</span>
                   <span style={{ fontSize: 12, color: "var(--color-text-soft)" }}>写真を追加する</span>
@@ -598,10 +645,11 @@ export const ItemDetailPage = () => {
                 <>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
                     {displayed.map((url, idx) => (
-                      <button key={url} onClick={() => setViewerIndex(photosExpanded ? idx : idx)}
+                      <button key={url} onClick={() => setViewerIndex(idx)}
                               style={{ position: "relative", aspectRatio: "1", borderRadius: 8,
                                        overflow: "hidden", border: "none", padding: 0, cursor: "pointer" }}>
-                        <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        <img src={url} alt="" loading="lazy"
+                             style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                       </button>
                     ))}
                     {photoUploading && (
@@ -611,13 +659,16 @@ export const ItemDetailPage = () => {
                       </div>
                     )}
                   </div>
-                  {!photosExpanded && photos.length > 3 && (
+                  {!photosExpanded && photos.length > 6 && (
                     <button onClick={() => setPhotosExpanded(true)}
                             style={{ width: "100%", marginTop: 8, padding: "8px 0", fontSize: 12,
                                      color: "var(--color-text-mid)", background: "none",
                                      border: "1px solid var(--color-border)", borderRadius: 8, cursor: "pointer" }}>
-                      残り{photos.length - 3}枚を見る &gt;
+                      残り{photos.length - 6}枚を見る &gt;
                     </button>
+                  )}
+                  {photoError && (
+                    <p style={{ fontSize: 11, color: "#E53E3E", marginTop: 6 }}>{photoError}</p>
                   )}
                   {photos.length > 0 && (
                     <button onClick={() => setShowBulkDeleteConfirm(true)}
@@ -668,8 +719,8 @@ export const ItemDetailPage = () => {
             {/* 写真 */}
             <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
                           padding: "0 16px" }}>
-              <img src={url} alt="" style={{ maxWidth: "100%", maxHeight: "100%",
-                                             objectFit: "contain", borderRadius: 8 }} />
+              <img src={url} alt="" loading="lazy"
+                   style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 8 }} />
             </div>
 
             {/* ナビゲーション＋削除 */}
