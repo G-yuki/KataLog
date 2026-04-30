@@ -612,7 +612,7 @@ export const ItemDetailPage = () => {
         {(() => {
           const photos = item.userPhotos ?? [];
           const canAdd = photos.length < MAX_PHOTOS;
-          const displayed = photosExpanded ? photos : photos.slice(0, 6);
+          const displayed = photosExpanded ? photos : photos.slice(0, 3);
           return (
             <div className="card p-4 mb-4">
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
@@ -660,12 +660,12 @@ export const ItemDetailPage = () => {
                       </div>
                     )}
                   </div>
-                  {!photosExpanded && photos.length > 6 && (
+                  {!photosExpanded && photos.length > 3 && (
                     <button onClick={() => setPhotosExpanded(true)}
                             style={{ width: "100%", marginTop: 8, padding: "8px 0", fontSize: 12,
                                      color: "var(--color-text-mid)", background: "none",
                                      border: "1px solid var(--color-border)", borderRadius: 8, cursor: "pointer" }}>
-                      残り{photos.length - 6}枚を見る &gt;
+                      残り{photos.length - 3}枚を見る &gt;
                     </button>
                   )}
                   {photoError && (
