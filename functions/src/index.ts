@@ -4,6 +4,7 @@ import { onDocumentDeleted } from "firebase-functions/v2/firestore";
 import { defineSecret } from "firebase-functions/params";
 import { GoogleGenerativeAI, SchemaType, type Schema } from "@google/generative-ai";
 import * as admin from "firebase-admin";
+import { randomUUID } from "crypto";
 
 admin.initializeApp();
 
@@ -322,7 +323,7 @@ export const enrichItem = onCall(
       const place = searchData.places?.[0] ?? null;
 
       // Step 2: Place Details Photos（Enterprise tier — placeId が取れた場合のみ）
-      let photoRef: string | null = null;
+      let placePhotoRef: string | null = null;
       if (place?.id) {
         const detailRes = await fetch(
           `https://places.googleapis.com/v1/places/${place.id}`,
@@ -334,7 +335,34 @@ export const enrichItem = onCall(
           }
         );
         const detailData = await detailRes.json() as { photos?: Array<{ name: string }> };
-        photoRef = detailData.photos?.[0]?.name ?? null;
+        const photoName = detailData.photos?.[0]?.name ?? null;
+
+        if (photoName) {
+          try {
+            // Photo Media API で写真をダウンロードして Storage に永続保存
+            // → ブラウザキャッシュ切れのたびに Places API を叩くコストを排除
+            const mediaUrl = `https://places.googleapis.com/v1/${photoName}/media?maxWidthPx=800&key=${mapsServerKey.value()}`;
+            const photoRes = await fetch(mediaUrl);
+            if (photoRes.ok) {
+              const buffer = Buffer.from(await photoRes.arrayBuffer());
+              const bucket = admin.storage().bucket();
+              const file = bucket.file(`pairs/${pairId}/items/${itemId}.jpg`);
+              const token = randomUUID();
+              await file.save(buffer, {
+                contentType: "image/jpeg",
+                metadata: {
+                  cacheControl: "public, max-age=31536000",
+                  metadata: { firebaseStorageDownloadTokens: token },
+                },
+              });
+              const enc = encodeURIComponent(file.name);
+              placePhotoRef = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${enc}?alt=media&token=${token}`;
+            }
+          } catch (e) {
+            console.warn("place photo Storage upload failed:", e);
+            // 失敗してもエンリッチ自体は継続（写真なしで保存）
+          }
+        }
       }
 
       // placeId を "" にすることで「検索済みだが未発見」を表し、再呼び出しを防ぐ
@@ -342,7 +370,7 @@ export const enrichItem = onCall(
         .doc(`pairs/${pairId}/items/${itemId}`)
         .update({
           placeId:       place?.id ?? "",
-          placePhotoRef: photoRef,
+          placePhotoRef,
           lat:           place?.location?.latitude ?? null,
           lng:           place?.location?.longitude ?? null,
         });
