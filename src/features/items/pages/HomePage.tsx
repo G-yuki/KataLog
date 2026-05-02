@@ -24,6 +24,14 @@ const photoUrl = (photoRef: string) =>
     ? photoRef
     : `https://places.googleapis.com/v1/${photoRef}/media?maxWidthPx=400&key=${MAPS_KEY}`;
 
+// ヘッダー写真の優先順: pinnedPhotoUrl → userPhotos[0] → placePhotoRef
+const heroUrl = (item: Item): string | null => {
+  if (item.pinnedPhotoUrl) return item.pinnedPhotoUrl;
+  if (item.userPhotos?.length) return item.userPhotos[0];
+  if (item.placePhotoRef) return photoUrl(item.placePhotoRef);
+  return null;
+};
+
 export const HomePage = () => {
   const navigate = useNavigate();
   const { pairId, loading: pairLoading } = usePair();
@@ -659,22 +667,22 @@ const GuideDetailOverlay = ({ item }: { item: Item }) => {
 const GoCard = ({ item, onClick, onDone, onWant, onDelete }:
   { item: Item; onClick: () => void; onDone: () => void; onWant: () => void; onDelete: () => void }) => {
   const s = CATEGORY_STYLE[item.category] ?? CATEGORY_STYLE["その他"];
-  const hasPhoto = !!item.placePhotoRef;
+  const photo = heroUrl(item);
   return (
     // カード全体をボタンにしてタップ判定を全面に
     <button onClick={onClick}
             style={{ flexShrink: 0, width: 120, height: 150, borderRadius: 12, overflow: "hidden",
                      position: "relative", border: "none", padding: 0, cursor: "pointer" }}>
       {/* 背景：写真 or グラデーション */}
-      {hasPhoto ? (
-        <img src={photoUrl(item.placePhotoRef!)} alt={item.title} loading="lazy"
+      {photo ? (
+        <img src={photo} alt={item.title} loading="lazy"
              style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
                       objectFit: "cover" }} />
       ) : (
         <div style={{ position: "absolute", inset: 0, background: s.bg }} />
       )}
       {/* 絵文字（写真なしのみ） */}
-      {!hasPhoto && (
+      {!photo && (
         <div style={{ position: "absolute", inset: 0, display: "flex",
                       alignItems: "center", justifyContent: "center" }}>
           <span style={{ fontSize: 40, opacity: 0.88,
@@ -735,22 +743,22 @@ const GoCard = ({ item, onClick, onDone, onWant, onDelete }:
 const GoodCard = ({ item, onTap, onWant, onDone, onDelete }:
   { item: Item; onTap: () => void; onWant: () => void; onDone: () => void; onDelete: () => void }) => {
   const s = CATEGORY_STYLE[item.category] ?? CATEGORY_STYLE["その他"];
-  const hasPhoto = !!item.placePhotoRef;
+  const photo = heroUrl(item);
   return (
     // カード全体をボタンにしてタップ判定を全面に
     <button onClick={onTap}
             style={{ position: "relative", borderRadius: 12, overflow: "hidden", height: 130,
                      border: "none", padding: 0, cursor: "pointer", width: "100%" }}>
       {/* 背景：写真 or グラデーション */}
-      {hasPhoto ? (
-        <img src={photoUrl(item.placePhotoRef!)} alt={item.title} loading="lazy"
+      {photo ? (
+        <img src={photo} alt={item.title} loading="lazy"
              style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
                       objectFit: "cover" }} />
       ) : (
         <div style={{ position: "absolute", inset: 0, background: s.bg }} />
       )}
       {/* 絵文字（写真なしのみ） */}
-      {!hasPhoto && (
+      {!photo && (
         <div style={{ position: "absolute", inset: 0, display: "flex",
                       alignItems: "center", justifyContent: "center" }}>
           <span style={{ fontSize: 36, opacity: 0.75,
@@ -840,8 +848,8 @@ const DoneRow = ({ item, onTap }: { item: Item; onTap: () => void }) => {
                     overflow: "hidden", position: "relative",
                     background: s.bg, display: "flex", alignItems: "center",
                     justifyContent: "center", fontSize: 20 }}>
-        {item.placePhotoRef ? (
-          <img src={photoUrl(item.placePhotoRef)} alt={item.title} loading="lazy"
+        {heroUrl(item) ? (
+          <img src={heroUrl(item)!} alt={item.title} loading="lazy"
                style={{ width: "100%", height: "100%", objectFit: "cover" }} />
         ) : (
           s.emoji

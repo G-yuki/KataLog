@@ -1,5 +1,5 @@
 // src/features/items/pages/ItemDetailPage.tsx
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../../../firebase/functions";
@@ -63,6 +63,19 @@ export const ItemDetailPage = () => {
   }, [pairId, pairLoading, navigate]);
 
   const item: Item | undefined = items.find((i) => i.itemId === itemId);
+
+  // ヘッダー写真: pinnedPhotoUrl → userPhotos からランダム1枚 → placePhotoRef の優先順
+  // userPhotosList.length を dep にすることで、枚数変化時のみ再ランダム選択
+  const userPhotosList = item?.userPhotos ?? [];
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const headerPhotoUrl = useMemo<string | null>(() => {
+    if (!item) return null;
+    if (item.pinnedPhotoUrl) return item.pinnedPhotoUrl;
+    if (userPhotosList.length > 0)
+      return userPhotosList[Math.floor(Math.random() * userPhotosList.length)];
+    if (item.placePhotoRef) return photoUrl(item.placePhotoRef);
+    return null;
+  }, [item?.pinnedPhotoUrl, item?.placePhotoRef, userPhotosList.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!item) return;
@@ -254,9 +267,11 @@ export const ItemDetailPage = () => {
       try { await deleteObject(ref(storage, decodeURIComponent(match[1]))); }
       catch { /* 既に削除済みの場合も無視 */ }
     }
-    await saveDetail(item.itemId, {
+    const updates: Parameters<typeof saveDetail>[1] = {
       userPhotos: (item.userPhotos ?? []).filter((u) => u !== url),
-    });
+    };
+    if (item.pinnedPhotoUrl === url) updates.pinnedPhotoUrl = null;
+    await saveDetail(item.itemId, updates);
     setViewerIndex(null);
   };
 
@@ -270,7 +285,7 @@ export const ItemDetailPage = () => {
         catch { /* ignore */ }
       })
     );
-    await saveDetail(item.itemId, { userPhotos: [] });
+    await saveDetail(item.itemId, { userPhotos: [], pinnedPhotoUrl: null });
     setShowBulkDeleteConfirm(false);
     setPhotosExpanded(false);
   };
@@ -285,7 +300,7 @@ export const ItemDetailPage = () => {
 
   const isDone = item.status === "done";
   const isPlaceCategory = (PLACE_CATEGORIES as readonly string[]).includes(item.category);
-  const hasPhoto = !!item.placePhotoRef;
+  const hasPhoto = !!headerPhotoUrl;
   const isEnriching = item.placeId === null && (isPlaceCategory || !!item.userPlaceUrl);
 
   return (
@@ -296,7 +311,7 @@ export const ItemDetailPage = () => {
       {hasPhoto ? (
         <div style={{ position: "relative", width: "100%", height: 220, flexShrink: 0 }}>
           <img
-            src={photoUrl(item.placePhotoRef!)}
+            src={headerPhotoUrl!}
             alt={item.title}
             style={{ width: "100%", height: "100%", objectFit: "cover" }}
           />
@@ -724,6 +739,21 @@ export const ItemDetailPage = () => {
                           padding: "0 16px" }}>
               <img src={url} alt="" loading="lazy"
                    style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 8 }} />
+            </div>
+
+            {/* ヘッダー固定ボタン */}
+            <div style={{ flexShrink: 0, textAlign: "center", paddingBottom: 4 }}>
+              <button
+                onClick={async () => {
+                  const newPinned = item.pinnedPhotoUrl === url ? null : url;
+                  await saveDetail(item.itemId, { pinnedPhotoUrl: newPinned });
+                }}
+                style={{ background: "none",
+                         border: `1px solid ${item.pinnedPhotoUrl === url ? "rgba(255,215,0,0.7)" : "rgba(255,255,255,0.3)"}`,
+                         borderRadius: 8, padding: "8px 20px", fontSize: 13, cursor: "pointer",
+                         color: item.pinnedPhotoUrl === url ? "#FFD700" : "rgba(255,255,255,0.7)" }}>
+                {item.pinnedPhotoUrl === url ? "📌 ヘッダーから解除" : "📌 ヘッダーに固定"}
+              </button>
             </div>
 
             {/* ナビゲーション＋削除 */}

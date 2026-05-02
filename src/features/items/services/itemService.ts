@@ -74,6 +74,7 @@ export const updateItemDetail = async (
     placePhotoRef?: string | null;
     completedAt?: Timestamp | null;
     userPhotos?: string[];
+    pinnedPhotoUrl?: string | null;
   }
 ): Promise<void> => {
   await updateDoc(doc(db, "pairs", pairId, "items", itemId), data);
