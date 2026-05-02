@@ -70,6 +70,7 @@ export interface Item {
   lng: number | null;
   userPlaceUrl?: string | null;
   userPhotos?: string[];        // ユーザーアップロード写真のStorage URL配列
+  pinnedPhotoUrl?: string | null; // ヘッダーに固定するユーザー写真URL
 }
 
 // AI生成時のアイテム（Firestore保存前）
