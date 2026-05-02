@@ -179,7 +179,7 @@ export const HomePage = () => {
           <div style={{ flex: 1 }}>
             <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 17, fontWeight: 600,
                          color: "var(--color-text-main)", letterSpacing: "0.01em" }}>
-              おでかけ
+              ホーム
             </h1>
             {pairNames && (
               <p style={{ fontSize: 11, color: "var(--color-text-mid)", marginTop: 3,
@@ -226,7 +226,7 @@ export const HomePage = () => {
                              border: filter === f ? "none" : "1px solid rgba(0,0,0,0.12)",
                              background: filter === f ? "var(--color-text-main)" : "transparent",
                              color: filter === f ? "var(--color-bg)" : "#5C4A35" }}>
-              {f === "all" ? "すべて" : f === "おでかけ" ? "外出" : f}
+              {f === "all" ? "すべて" : f}
             </button>
           ))}
         </div>
@@ -468,7 +468,7 @@ export const HomePage = () => {
                                    background: newCategory === cat ? "var(--color-text-main)" : "transparent",
                                    color: newCategory === cat ? "var(--color-bg)" : "#5C4A35",
                                    cursor: "pointer", fontFamily: "var(--font-sans)" }}>
-                    {CATEGORY_STYLE[cat]?.emoji} {cat === "おでかけ" ? "外出" : cat}
+                    {CATEGORY_STYLE[cat]?.emoji} {cat}
                   </button>
                 ))}
               </div>
@@ -720,7 +720,7 @@ const GoCard = ({ item, onClick, onDone, onWant, onDelete }:
         <div style={{ fontSize: 9, letterSpacing: "0.08em",
                       color: "rgba(255,255,255,0.7)", fontFamily: "var(--font-sans)",
                       marginBottom: 3 }}>
-          {item.category === "おでかけ" ? "外出" : item.category}
+          {item.category}
         </div>
         <p style={{ fontSize: 10, fontWeight: 500, color: "#fff", lineHeight: 1.35,
                     fontFamily: "var(--font-sans)", margin: 0,
@@ -796,7 +796,7 @@ const GoodCard = ({ item, onTap, onWant, onDone, onDelete }:
         <div style={{ fontSize: 9, letterSpacing: "0.08em",
                       color: "rgba(255,255,255,0.7)", fontFamily: "var(--font-sans)",
                       marginBottom: 3 }}>
-          {item.category === "おでかけ" ? "外出" : item.category}
+          {item.category}
         </div>
         <p style={{ fontSize: 10, fontWeight: 500, color: "#fff", lineHeight: 1.35,
                     fontFamily: "var(--font-sans)", margin: 0,
