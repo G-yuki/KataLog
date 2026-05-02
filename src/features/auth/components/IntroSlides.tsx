@@ -61,16 +61,17 @@ export const IntroSlides = ({ onDone }: { onDone: () => void }) => {
       </button>
 
       {/* ロゴ */}
-      <div style={{ padding: "120px 24px 0", display: "flex", justifyContent: "center" }}>
+      <div style={{ position: "absolute", top: 160, left: 0, right: 0,
+                    display: "flex", justifyContent: "center" }}>
         <img src="/logo.png" alt="KataLog" style={{ height: 40, opacity: 0.9 }} />
       </div>
 
-      {/* コンテンツ */}
+      {/* コンテンツ（paddingTopでロゴ分のスペースを確保し、文章位置を維持） */}
       <div
         style={{
           flex: 1, display: "flex", flexDirection: "column",
           alignItems: "center", justifyContent: "center",
-          padding: "0 36px", gap: 24, textAlign: "center",
+          padding: "160px 36px 0", gap: 24, textAlign: "center",
         }}
       >
         <h2
