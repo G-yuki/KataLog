@@ -238,7 +238,8 @@ export const HomePage = () => {
       {/* ── 検索窓 ── */}
       <div style={{ flexShrink: 0, padding: "6px 12px",
                     background: "var(--color-bg)", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6,
+        <div data-guide="search-area"
+             style={{ display: "flex", alignItems: "center", gap: 6,
                       background: "rgba(0,0,0,0.05)", borderRadius: 20, padding: "5px 12px" }}>
           <span style={{ fontSize: 12, opacity: 0.5 }}>🔍</span>
           <input
