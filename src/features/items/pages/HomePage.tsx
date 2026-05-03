@@ -164,7 +164,7 @@ export const HomePage = () => {
 
   const progress = items.length > 0 ? doneItems.length / items.length : 0;
 
-  if (pairLoading || loading) return <Loading />;
+  if (pairLoading || loading) return <Loading message={pairLoading ? "データ確認中..." : "読み込み中..."} />;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100dvh",
@@ -215,8 +215,11 @@ export const HomePage = () => {
       {/* ── フィルター + 並び替え ── */}
       <div style={{ flexShrink: 0, display: "flex", alignItems: "center",
                     background: "var(--color-bg)", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
+        <span style={{ fontSize: 10, color: "var(--color-text-soft)", flexShrink: 0,
+                       padding: "0 6px 0 12px", fontFamily: "var(--font-sans)",
+                       letterSpacing: "0.04em" }}>カテゴリ</span>
         <div data-guide="filter-area"
-             style={{ flex: 1, padding: "4px 0 4px 12px", display: "flex", gap: 6,
+             style={{ flex: 1, padding: "4px 0", display: "flex", gap: 6,
                       overflowX: "auto", scrollbarWidth: "none" }}>
           {(["all", ...CATEGORIES] as Filter[]).map((f) => (
             <button key={f} onClick={() => setFilter(f)}

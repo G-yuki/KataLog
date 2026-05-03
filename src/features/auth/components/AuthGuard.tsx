@@ -23,7 +23,7 @@ export const AuthGuard = ({ children }: Props) => {
                   alignItems: "center", justifyContent: "center", gap: 20,
                   background: "var(--color-bg)" }}>
       <img src="/logo.png" alt="KataLog" style={{ height: 32, opacity: 0.9 }} />
-      <Loading />
+      <Loading message="認証情報を確認中..." />
     </div>
   );
 
