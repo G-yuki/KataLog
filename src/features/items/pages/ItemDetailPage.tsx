@@ -12,17 +12,10 @@ import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage
 import { storage } from "../../../firebase/storage";
 import type { Item } from "../../../types";
 
-const MAPS_KEY = import.meta.env.VITE_MAPS_BROWSER_KEY as string;
 const PLACE_CATEGORIES = ["おでかけ", "食事", "スポーツ", "映画", "音楽"] as const;
 const MAX_PHOTOS = 20;
 const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
 const ALLOWED_EXT  = new Set(["jpg", "jpeg", "png", "gif", "webp"]);
-
-// Storage URL はそのまま、旧形式（Places photo参照名）は API 経由で取得
-const photoUrl = (photoRef: string) =>
-  photoRef.startsWith("https://")
-    ? photoRef
-    : `https://places.googleapis.com/v1/${photoRef}/media?maxWidthPx=600&key=${MAPS_KEY}`;
 
 // /maps/search 形式はルート案内でなく場所検索として開く
 const mapsSearchUrl = (title: string) =>
@@ -73,7 +66,7 @@ export const ItemDetailPage = () => {
     if (item.pinnedPhotoUrl) return item.pinnedPhotoUrl;
     if (userPhotosList.length > 0)
       return userPhotosList[Math.floor(Math.random() * userPhotosList.length)];
-    if (item.placePhotoRef) return photoUrl(item.placePhotoRef);
+    if (item.placePhotoRef?.startsWith("https://")) return item.placePhotoRef;
     return null;
   }, [item?.pinnedPhotoUrl, item?.placePhotoRef, userPhotosList.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -90,11 +83,13 @@ export const ItemDetailPage = () => {
   // CF失敗時は placeId が null のまま残るので次回open時に自動リトライ
   useEffect(() => {
     if (!item || !pairId || enrichCalled.current) return;
+    const hasOldPhotoRef = !!item.placePhotoRef && !item.placePhotoRef.startsWith("https://");
     const needsEnrich =
-      item.placeId === null && (
+      hasOldPhotoRef ||
+      (item.placeId === null && (
         (PLACE_CATEGORIES as readonly string[]).includes(item.category) ||
         !!item.userPlaceUrl
-      );
+      ));
     if (!needsEnrich) return;
 
     enrichCalled.current = true;

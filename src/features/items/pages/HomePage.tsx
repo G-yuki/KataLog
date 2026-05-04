@@ -16,19 +16,11 @@ import type { Item, Category, ItemType, ItemStatus } from "../../../types";
 type Filter = "all" | Category;
 
 const CATEGORIES: Category[] = ["おでかけ", "映画", "食事", "本", "ゲーム", "音楽", "スポーツ", "その他"];
-const MAPS_KEY = import.meta.env.VITE_MAPS_BROWSER_KEY as string;
-
-// Storage URL はそのまま、旧形式（Places photo参照名）は API 経由で取得
-const photoUrl = (photoRef: string) =>
-  photoRef.startsWith("https://")
-    ? photoRef
-    : `https://places.googleapis.com/v1/${photoRef}/media?maxWidthPx=400&key=${MAPS_KEY}`;
-
-// ヘッダー写真の優先順: pinnedPhotoUrl → userPhotos[0] → placePhotoRef
+// ヘッダー写真の優先順: pinnedPhotoUrl → userPhotos[0] → placePhotoRef(Storage URLのみ)
 const heroUrl = (item: Item): string | null => {
   if (item.pinnedPhotoUrl) return item.pinnedPhotoUrl;
   if (item.userPhotos?.length) return item.userPhotos[0];
-  if (item.placePhotoRef) return photoUrl(item.placePhotoRef);
+  if (item.placePhotoRef?.startsWith("https://")) return item.placePhotoRef;
   return null;
 };
 
