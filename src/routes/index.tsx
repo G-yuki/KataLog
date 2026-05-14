@@ -16,7 +16,6 @@ import { InquiryPage } from "../features/settings/pages/InquiryPage";
 import { SuggestPage } from "../features/suggest/pages/SuggestPage";
 import { MemoryPage } from "../features/memory/pages/MemoryPage";
 
-
 export const AppRoutes = () => {
   return (
     <Routes>

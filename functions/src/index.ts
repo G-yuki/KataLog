@@ -285,7 +285,6 @@ export const enrichItem = onCall(
       throw new HttpsError("invalid-argument", "パラメータが不足しています。");
     }
 
-    // userPlaceUrl が渡された場合はリダイレクト解決して場所名を取得
     let resolvedTitle = title;
     if (userPlaceUrl) {
       const placeName = await resolvePlaceNameFromUrl(userPlaceUrl);
@@ -296,8 +295,10 @@ export const enrichItem = onCall(
       ? resolvedTitle
       : (prefecture ? `${resolvedTitle} ${prefecture}` : resolvedTitle);
 
+    // Step 1: Text Search（Essentials tier）
+    // 失敗時は place=null のまま続行 → Firestore に placeId="" を確定書き込みして再呼び出しを防ぐ
+    let place: { id: string; location?: { latitude: number; longitude: number } } | null = null;
     try {
-      // Step 1: Text Search（Essentials tier — places.photos を除外）
       const searchRes = await fetch("https://places.googleapis.com/v1/places:searchText", {
         method: "POST",
         headers: {
@@ -312,80 +313,76 @@ export const enrichItem = onCall(
           pageSize: 5,
         }),
       });
-
       const searchData = await searchRes.json() as {
-        places?: Array<{
-          id: string;
-          location?: { latitude: number; longitude: number };
-        }>;
+        places?: Array<{ id: string; location?: { latitude: number; longitude: number } }>;
       };
-
-      const place = searchData.places?.[0] ?? null;
-
-      // Step 2: Place Details Photos（Enterprise tier — placeId が取れた場合のみ）
-      let placePhotoRef: string | null = null;
-      if (place?.id) {
-        try {
-          const detailRes = await fetch(
-            `https://places.googleapis.com/v1/places/${place.id}`,
-            {
-              headers: {
-                "X-Goog-Api-Key": mapsServerKey.value(),
-                "X-Goog-FieldMask": "photos",
-              },
-            }
-          );
-          if (!detailRes.ok) throw new Error(`Place Details HTTP ${detailRes.status}`);
-          const detailData = await detailRes.json() as { photos?: Array<{ name: string }> };
-          const photoName = detailData.photos?.[0]?.name ?? null;
-
-          if (photoName) {
-            try {
-              const mediaUrl = `https://places.googleapis.com/v1/${photoName}/media?maxWidthPx=800&key=${mapsServerKey.value()}`;
-              const photoRes = await fetch(mediaUrl);
-              if (photoRes.ok) {
-                const buffer = Buffer.from(await photoRes.arrayBuffer());
-                const bucket = admin.storage().bucket();
-                const file = bucket.file(`pairs/${pairId}/items/${itemId}.jpg`);
-                const token = randomUUID();
-                await file.save(buffer, {
-                  contentType: "image/jpeg",
-                  metadata: {
-                    cacheControl: "public, max-age=31536000",
-                    metadata: { firebaseStorageDownloadTokens: token },
-                  },
-                });
-                const enc = encodeURIComponent(file.name);
-                placePhotoRef = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${enc}?alt=media&token=${token}`;
-              }
-            } catch (e) {
-              console.warn("place photo Storage upload failed:", e);
-            }
-          }
-        } catch (e) {
-          console.warn("Place Details fetch failed, saving without photo:", e);
-        }
-      }
-
-      // placeId を "" にすることで「検索済みだが未発見」を表し、再呼び出しを防ぐ
-      await admin.firestore()
-        .doc(`pairs/${pairId}/items/${itemId}`)
-        .update({
-          placeId:       place?.id ?? "",
-          placePhotoRef,
-          lat:           place?.location?.latitude ?? null,
-          lng:           place?.location?.longitude ?? null,
-        });
-
-      return { ok: true };
-    } catch (error) {
-      if (error instanceof HttpsError) throw error;
-      const msg = error instanceof Error ? error.message : String(error);
-      console.error("enrichItem error:", msg);
-      throw new HttpsError("internal", `エンリッチエラー: ${msg}`);
+      place = searchData.places?.[0] ?? null;
+    } catch (e) {
+      // ネットワークエラー・JSONパースエラー（非JSON応答）等
+      // place=null のまま Firestore 書き込みに進み placeId="" で確定させる
+      console.warn("enrichItem Step1 failed, marking as no-place to stop retry:", e);
     }
+
+    // Step 2: Place Details Photos（Enterprise tier — place 発見時のみ）
+    let placePhotoRef: string | null = null;
+    if (place?.id) {
+      try {
+        const detailRes = await fetch(
+          `https://places.googleapis.com/v1/places/${place.id}`,
+          {
+            headers: {
+              "X-Goog-Api-Key": mapsServerKey.value(),
+              "X-Goog-FieldMask": "photos",
+            },
+          }
+        );
+        if (!detailRes.ok) throw new Error(`Place Details HTTP ${detailRes.status}`);
+        const detailData = await detailRes.json() as { photos?: Array<{ name: string }> };
+        const photoName = detailData.photos?.[0]?.name ?? null;
+
+        if (photoName) {
+          try {
+            const mediaUrl = `https://places.googleapis.com/v1/${photoName}/media?maxWidthPx=800&key=${mapsServerKey.value()}`;
+            const photoRes = await fetch(mediaUrl);
+            if (photoRes.ok) {
+              const buffer = Buffer.from(await photoRes.arrayBuffer());
+              const bucket = admin.storage().bucket();
+              const file = bucket.file(`pairs/${pairId}/items/${itemId}.jpg`);
+              const token = randomUUID();
+              await file.save(buffer, {
+                contentType: "image/jpeg",
+                metadata: {
+                  cacheControl: "public, max-age=31536000",
+                  metadata: { firebaseStorageDownloadTokens: token },
+                },
+              });
+              const enc = encodeURIComponent(file.name);
+              placePhotoRef = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${enc}?alt=media&token=${token}`;
+            }
+          } catch (e) {
+            console.warn("place photo Storage upload failed:", e);
+          }
+        }
+      } catch (e) {
+        console.warn("Place Details fetch failed, saving without photo:", e);
+      }
+    }
+
+    // Firestore 確定書き込み（Step1/2 の成否にかかわらず必ず実行）
+    // placeId="" = 「検索済み・場所なし or Step1失敗」→ 以降の詳細画面オープンで再呼び出しされない
+    await admin.firestore()
+      .doc(`pairs/${pairId}/items/${itemId}`)
+      .update({
+        placeId:      place?.id ?? "",
+        placePhotoRef,
+        lat:          place?.location?.latitude ?? null,
+        lng:          place?.location?.longitude ?? null,
+      });
+
+    return { ok: true };
   }
 );
+
 
 // ── アイテム削除トリガー（TTL 削除時に Storage 写真を削除） ────────────
 export const onItemDeleted = onDocumentDeleted(
