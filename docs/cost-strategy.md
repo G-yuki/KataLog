@@ -1,6 +1,6 @@
 # KataLog コスト戦略・損益分岐点まとめ
 
-最終更新：2026-05-02（ドキュメント整理・課金ポイント表化・プラン別コスト・Stripe手数料追加）  
+最終更新：2026-05-15（enrichItem 無限リトライバグ修正・旧形式placePhotoRef全件Storage URL化完了）  
 収益モデル：**フリーミアム**（基本無料 → フェーズ2でStandard/Supporterプラン導入）
 
 ---
@@ -253,6 +253,9 @@ KataLogの主なバリュー：
 |--------|------|---------|------|
 | 🔴 最高 | enrichItem FieldMaskから `places.photos` を除去 → Essentials化 | Text Search無料枠10倍（1K→10K/月）・単価1/12 | ✅ 対応済み（2026-04-29） |
 | 🔴 最高 | enrichItem でPlace写真をStorageに永続保存 | ブラウザキャッシュ切れ時のPhoto Media API繰り返し課金を排除 | ✅ 対応済み（2026-05-01） |
+| 🔴 最高 | 旧形式 `placePhotoRef`（非https）をブラウザから直接Places API呼び出しする実装を廃止 | 毎画面描画で Enterprise 課金が発生していたバグを修正（1人利用で1,000件/日超の根本原因）。詳細ページ開封時に自動再エンリッチ（ラジーマイグレーション）で Storage URL に移行 | ✅ 対応済み（2026-05-04） |
+| 🔴 最高 | enrichItem CF 無限リトライバグ修正 | Step1（Text Search）を独立 try-catch に分離。失敗時も `placeId=""` を確定書き込みして詳細画面を開くたびに再課金される無限リトライを解消。**5/12 インシデント**：15画面開封で66円課金（旧コードでは Step1 失敗 → placeId=null が残り → 次回開封で再度 enrichItem 呼び出し → 繰り返し課金）。この修正により再発なし | ✅ 対応済み（2026-05-15） |
+| 🟡 中 | 旧形式 `placePhotoRef` 一括移行 CF | migrateOldPlacePhotos（Photo Media DL直接・success:25/nulled:29/failed:0）→ recoverNullPhotos（Place Details経由で再取得・success:34/failed:0）で全件 Storage URL 化完了。hasOldPhotoRef lazy migration コードもフロントエンドから削除 | ✅ 対応済み（2026-05-15） |
 | 🔴 最高 | tryアイテムにFirestore TTL自動削除を設定 | Firestore肥大化防止・write quota不要・無料 | ✅ 実装済み |
 | 🟡 中 | URL保存時、同一URL再保存でenrichItemを呼ばない | 無駄なText Search API呼び出し防止 | ✅ 修正済み |
 | 🟡 中 | SUGGEST月次回数カウンター実装 | フェーズ2の課金基盤 | ⬜ 未対応 |

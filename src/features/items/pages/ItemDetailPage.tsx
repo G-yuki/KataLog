@@ -78,18 +78,15 @@ export const ItemDetailPage = () => {
   }, [item]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Places エンリッチ: placeId===null（未検索）のときだけ呼ぶ
-  // placeId===""  → 検索済み・場所なし → スキップ
+  // placeId===""  → 検索済み・場所なし or Step1失敗で確定済み → スキップ
   // placeId="xxx" → 検索済み（写真なしも含む）→ スキップ
-  // CF失敗時は placeId が null のまま残るので次回open時に自動リトライ
   useEffect(() => {
     if (!item || !pairId || enrichCalled.current) return;
-    const hasOldPhotoRef = !!item.placePhotoRef && !item.placePhotoRef.startsWith("https://");
     const needsEnrich =
-      hasOldPhotoRef ||
-      (item.placeId === null && (
+      item.placeId === null && (
         (PLACE_CATEGORIES as readonly string[]).includes(item.category) ||
         !!item.userPlaceUrl
-      ));
+      );
     if (!needsEnrich) return;
 
     enrichCalled.current = true;
@@ -107,8 +104,6 @@ export const ItemDetailPage = () => {
         title: item.title,
         prefecture,
         userPlaceUrl: item.userPlaceUrl ?? undefined,
-      }).catch(() => {
-        enrichCalled.current = false;
       });
     })();
   }, [item, pairId]);

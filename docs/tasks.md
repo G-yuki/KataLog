@@ -1,6 +1,6 @@
 # lifrave 残タスク進捗管理
 
-最終更新: 2026-05-04
+最終更新: 2026-05-15
 
 ## ステータス凡例
 - ⬜ 未着手
@@ -36,6 +36,10 @@
 | cost最適化 | enrichPairItems削除（未使用CF）・URL重複保存時のenrich呼び出し抑制 | 2026-04-29 |
 | Essentials化 | enrichItem FieldMaskからplaces.photos除去→Text Search Essentials化（無料枠1K→10K・単価1/12） | 2026-04-29 |
 | spec統合 | spec.md完全リライト・specs.md削除（API仕様・コスト・既知課題を1ファイルに統合） | 2026-04-29 |
+| ユーザー写真ヘッダー差し替え | userPhotos/pinnedPhotoUrl がある場合にヘッダー写真を優先表示・ピン固定機能追加 | 2026-04-30 |
+| Places直接呼び出し廃止 | heroUrl()/headerPhotoUrl が旧形式placePhotoRef（非https）をnull返却してブラウザからの Enterprise 課金を停止・ラジーマイグレーション（詳細ページ開封時に自動再エンリッチ）追加・CF Step2a try-catch修正 | 2026-05-04 |
+| enrichItem 無限リトライ修正 | Step1（Text Search）を独立 try-catch に分離。失敗時も `placeId=""` を確定書き込みして再呼び出しを防止。5/12 に15画面開封で66円課金した根本原因（placeId=null が残り続ける）を解消 | 2026-05-15 |
+| 旧形式placePhotoRef全件Storage URL化 | migrateOldPlacePhotos CF（success:25・nulled:29）→ recoverNullPhotos CF（success:34）で全アイテムの placePhotoRef を Storage URL または null に統一。hasOldPhotoRef lazy migration コードもフロントエンドから削除 | 2026-05-15 |
 
 ---
 
@@ -50,9 +54,9 @@
 | Googleマップ写真Storage保存 | enrichItem CF でPlace写真をStorageに永続保存しplacePhotoRefをStorage URLに変更 | ✅ | 2026-05-01 実装済み。キャッシュ切れ時のAPI再課金を排除 |
 | MEMORY動画・音楽 | 完了アイテム+写真からスタイル別スライドショー動画+AI BGMを生成 | ⬜ | 無料月1回・Standard月10回・Supporter無制限。Canvas/ffmpeg+Suno API ~$0.015/回 |
 | フリーミアム課金 | Stripe連携・planフィールド・SUGGEST/MEMORYカウンター実装 | ⬜ | Phase 2（200〜300ペア到達時）に対応。Stripe手数料3.6%+¥40/件 |
-| ユーザー写真ヘッダー差し替え | userPhotosをアップロード済みの場合、詳細画面ヘッダーをGoogleマップ写真→ユーザー写真に差し替え | ⬜ | 複数枚ある場合はランダム表示。固定ピン機能（pinnedPhotoUrl）も検討。設計は確定済み・未実装 |
 | 1人利用対応 | ペア前提のコンセプトを個人利用にも開放（ソロ旅行・個人バケットリスト等） | ⬜ | 改修範囲大。UI中の「ふたりの」表記・ペア作成フロー・プラン管理（上位プランをペアに適用）など設計が必要 |
-| 旧形式placePhotoRef一括移行 | Storage保存前（2026-05-01以前）のアイテムのplacePhotoRef（`places/XXX/photos/YYY`形式）をStorageに一括移行するCFを作成 | ⬜ | 既存の参照名を直接使用するのでPlace Details API不要、Photo Media APIのみ（1件¥0.007）。現状はラジーマイグレーション（詳細ページ開封時に再エンリッチ）で代替 |
+| 旧形式placePhotoRef一括移行 | Storage保存前（2026-05-01以前）のアイテムのplacePhotoRef（`places/XXX/photos/YYY`形式）をStorageに一括移行するCFを作成 | ✅ | 2026-05-15 完了。migrateOldPlacePhotos（success:25, nulled:29）→ recoverNullPhotos（success:34）で全件Storage URL化。enrichItem も Step1失敗時に placeId="" を確定書き込みするよう修正済み（無限リトライ解消）。 |
+| Storage URLリンク切れ検知と再取得 | placePhotoRef（Storage URL）が404になった場合にenrichItemを再実行して写真を再取得するハンドリング | ❌ | Firebase Storage のトークン付きURLは期限切れなし。アイテム削除以外でリンク切れは起きないため現状は不要。ユーザーから「写真が表示されない」報告が増えた場合に検討。 |
 
 ---
 
