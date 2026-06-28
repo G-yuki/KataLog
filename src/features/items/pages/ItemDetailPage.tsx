@@ -47,13 +47,13 @@ export const ItemDetailPage = () => {
   const [showHeaderAdjust, setShowHeaderAdjust] = useState(false);
   const enrichCalled = useRef(false);
 
+  const item: Item | undefined = items.find((i) => i.itemId === itemId);
+
   const photo = usePhotoUpload(pairId, item, saveDetail);
 
   useEffect(() => {
     if (!pairLoading && !pairId) navigate("/", { replace: true });
   }, [pairId, pairLoading, navigate]);
-
-  const item: Item | undefined = items.find((i) => i.itemId === itemId);
 
   // ヘッダー写真: pinnedPhotoUrl → userPhotos からランダム1枚 → placePhotoRef の優先順
   // userPhotosList.length を dep にすることで、枚数変化時のみ再ランダム選択

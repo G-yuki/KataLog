@@ -138,9 +138,14 @@ export const addManualItem = async (
     memo: string | null;
     userPlaceUrl: string | null;
     completedAtDate?: Date;
+    prefecture?: string;
+    overseas?: string;
   }
 ): Promise<void> => {
   const ref = doc(collection(db, "pairs", pairId, "items"));
+  const areaFields: Record<string, string> = {};
+  if (data.prefecture) areaFields.prefecture = data.prefecture;
+  if (data.overseas)   areaFields.overseas   = data.overseas;
   await setDoc(ref, {
     title: data.title,
     category: data.category,
@@ -161,6 +166,7 @@ export const addManualItem = async (
     placePhotoRef: null,
     lat: null,
     lng: null,
+    ...areaFields,
     createdAt: serverTimestamp(),
   });
 };

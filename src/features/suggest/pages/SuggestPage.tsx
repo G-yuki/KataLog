@@ -10,7 +10,7 @@ import { usePair } from "../../../contexts/PairContext";
 import { db } from "../../../firebase/firestore";
 import { doc, getDoc, updateDoc, deleteField, serverTimestamp } from "firebase/firestore";
 import {
-  GENRES, PREFECTURES, CATEGORY_STYLE,
+  GENRES, CATEGORY_STYLE,
   RANGE_OPTIONS, CHILDREN_OPTIONS, TRANSPORT_OPTIONS, BUDGET_OPTIONS, INDOOR_OPTIONS,
 } from "../../../lib/constants";
 import type { Hearing, ItemDraft } from "../../../types";

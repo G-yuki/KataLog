@@ -82,6 +82,9 @@ export interface Item {
   access?: "transit" | "car" | "both";
   weatherSensitive?: boolean;
   seasonBest?: ("spring" | "summer" | "autumn" | "winter")[];
+  // エリア（都道府県 or "全国" / "海外" → スコアリング用）
+  prefecture?: string;   // 国内アイテム: 都道府県名 or "全国"
+  overseas?: string;     // 海外アイテム: 地域名 or 国名
 }
 
 // AI生成時のアイテム（Firestore保存前）

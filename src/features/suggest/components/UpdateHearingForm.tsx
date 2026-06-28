@@ -2,28 +2,9 @@ import { useState } from "react";
 import {
   GENRES, PREFECTURES,
   RANGE_OPTIONS, CHILDREN_OPTIONS, TRANSPORT_OPTIONS, BUDGET_OPTIONS, INDOOR_OPTIONS,
+  OVERSEAS_REGIONS, OVERSEAS_COUNTRIES,
 } from "../../../lib/constants";
 import type { Hearing } from "../../../types";
-
-const OVERSEAS_REGIONS = [
-  "東南アジア",
-  "東アジア",
-  "ヨーロッパ",
-  "ハワイ・グアム",
-  "アメリカ・カナダ",
-  "オセアニア",
-  "中東・アフリカ",
-] as const;
-
-const OVERSEAS_COUNTRIES: Record<string, string[]> = {
-  "東南アジア":    ["タイ", "ベトナム", "バリ島", "シンガポール", "マレーシア", "フィリピン"],
-  "東アジア":      ["韓国", "台湾", "中国", "香港"],
-  "ヨーロッパ":    ["フランス", "イタリア", "スペイン", "イギリス", "ドイツ", "ポルトガル"],
-  "ハワイ・グアム": ["ハワイ", "グアム", "サイパン"],
-  "アメリカ・カナダ": ["アメリカ", "カナダ"],
-  "オセアニア":    ["オーストラリア", "ニュージーランド"],
-  "中東・アフリカ": ["UAE（ドバイ）", "エジプト", "南アフリカ"],
-};
 
 interface Props {
   hearing: Partial<Hearing>;

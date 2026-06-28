@@ -1,5 +1,5 @@
 // src/features/memory/pages/MemoryPage.tsx
-import { useState, useEffect, useRef, Fragment } from "react";
+import { useState, useEffect, useRef, useMemo, Fragment } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loading } from "../../../components/Loading";
 import { BottomNav } from "../../../components/BottomNav";
@@ -8,9 +8,12 @@ import { usePair } from "../../../contexts/PairContext";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../../../firebase/functions";
 import { CATEGORY_STYLE, CATEGORY_LABEL } from "../../../lib/constants";
-import { type Timestamp } from "firebase/firestore";
+import { type Timestamp, doc, getDoc } from "firebase/firestore";
+import { db } from "../../../firebase/firestore";
 import { heroUrl } from "../../../lib/item";
-import type { Item } from "../../../types";
+import { useWeather } from "../../../hooks/useWeather";
+import { scoreItem } from "../../../lib/scoring";
+import type { Hearing } from "../../../types";
 
 const todayYM = () => {
   const d = new Date();
@@ -55,6 +58,24 @@ export const MemoryPage = () => {
     });
 
   const todoItems = items.filter((i) => i.status !== "done");
+
+  const [hearing, setHearing] = useState<Hearing | null>(null);
+  useEffect(() => {
+    if (!pairId) return;
+    getDoc(doc(db, "pairs", pairId)).then((snap) => {
+      if (snap.exists()) setHearing((snap.data() as { hearing?: Hearing }).hearing ?? null);
+    });
+  }, [pairId]);
+
+  const weather = useWeather(hearing?.prefecture ?? undefined);
+
+  const scoredTodos = useMemo(() => {
+    if (!hearing) return todoItems.map((item) => ({ item, score: null as null }));
+    const h = hearing;
+    return todoItems
+      .map((item) => ({ item, score: scoreItem(item, h, weather) }))
+      .sort((a, b) => (b.score?.total ?? 0) - (a.score?.total ?? 0));
+  }, [todoItems, hearing, weather]);
 
   const [showIntro, setShowIntro] = useState(() => !localStorage.getItem("memoryIntroSeen"));
   const [startMonth, setStartMonth] = useState(todayYM());
@@ -139,7 +160,7 @@ export const MemoryPage = () => {
       >(functions, "generateMemory");
       const payload = filteredDoneItems.map((i) => ({
         title: i.title,
-        category: i.category,
+        category: CATEGORY_LABEL[i.category] ?? i.category,
         rating: i.rating,
         memo: i.memo,
         completedMonth: i.completedAt
@@ -148,7 +169,7 @@ export const MemoryPage = () => {
       }));
       const result = await fn({
         items: payload,
-        todoItems: todoItems.map((i) => ({ title: i.title, category: i.category })),
+        todoItems: todoItems.map((i) => ({ title: i.title, category: CATEGORY_LABEL[i.category] ?? i.category })),
         period: getAiLabel(startMonth, endMonth),
       });
       // AI が絵文字プレースホルダーをそのまま出力した場合のフォールバック
@@ -425,6 +446,60 @@ export const MemoryPage = () => {
                         {generating ? "生成中..." : "🔄 再生成"}
                       </button>
                     </div>
+
+                    {/* 次のおすすめプラン */}
+                    {scoredTodos.length > 0 && (
+                      <div style={{ background: "#fff", borderRadius: 14, padding: "16px 20px",
+                                    border: "1px solid rgba(0,0,0,0.07)" }}>
+                        <p style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-soft)",
+                                    letterSpacing: "0.08em", marginBottom: 12 }}>
+                          次のおすすめプラン
+                        </p>
+                        {scoredTodos.slice(0, 5).map(({ item, score }, idx) => {
+                          const s = CATEGORY_STYLE[item.category] ?? CATEGORY_STYLE["other"];
+                          return (
+                            <button key={item.itemId}
+                                    onClick={() => navigate(`/home/${item.itemId}`, { state: { from: "/memory" } })}
+                                    style={{ display: "flex", alignItems: "center", gap: 12,
+                                             width: "100%", background: "transparent",
+                                             border: "none", textAlign: "left", cursor: "pointer",
+                                             padding: "10px 0",
+                                             borderBottom: idx < Math.min(scoredTodos.length, 5) - 1
+                                               ? "1px solid rgba(0,0,0,0.05)" : "none" }}>
+                              <div style={{ width: 40, height: 40, borderRadius: 8, flexShrink: 0,
+                                            overflow: "hidden",
+                                            background: s.bg, display: "flex", alignItems: "center",
+                                            justifyContent: "center", fontSize: 18 }}>
+                                {heroUrl(item) ? (
+                                  <img src={heroUrl(item)!} alt={item.title} loading="lazy"
+                                       style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                ) : s.emoji}
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <p style={{ fontSize: 13, fontWeight: 500, color: "var(--color-text-main)",
+                                            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                  {item.title}
+                                </p>
+                                <p style={{ fontSize: 10, color: "var(--color-text-soft)", marginTop: 2 }}>
+                                  {CATEGORY_LABEL[item.category] ?? item.category}
+                                </p>
+                              </div>
+                              {score !== null && (
+                                <div style={{ flexShrink: 0, textAlign: "right" }}>
+                                  <p style={{ fontSize: 12, fontWeight: 700,
+                                              color: score.total >= 60 ? "var(--color-primary)" : "var(--color-text-soft)" }}>
+                                    {score.total}
+                                  </p>
+                                  <p style={{ fontSize: 9, color: "var(--color-text-soft)", marginTop: 1 }}>
+                                    おすすめ度
+                                  </p>
+                                </div>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
               </>

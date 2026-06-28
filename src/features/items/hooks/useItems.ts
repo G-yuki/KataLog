@@ -8,6 +8,7 @@ import {
   deleteItem,
 } from "../services/itemService";
 import { Timestamp } from "firebase/firestore";
+import { latLngToPrefecture } from "../../../lib/weather";
 import type { Item, ItemStatus } from "../../../types";
 
 export const useItems = (pairId: string | null) => {
@@ -23,11 +24,23 @@ export const useItems = (pairId: string | null) => {
     setLoading(true);
     const unsubscribe = subscribeItems(pairId, (data) => {
       // displayOrder があれば優先、なければ createdAt 順（subscribeItems で既にソート済み）
-      const sorted = [...data].sort((a, b) => {
-        const oa = (a as Item & { displayOrder?: number }).displayOrder ?? 9999;
-        const ob = (b as Item & { displayOrder?: number }).displayOrder ?? 9999;
-        return oa - ob;
-      });
+      const sorted = [...data]
+        .map((item) => ({
+          ...item,
+          // "食事" はレガシー値。"gourmet" に正規化してアプリ全体で統一
+          category: (item.category as string) === "食事" ? "gourmet" : item.category,
+          // lat/lng 有 & prefecture/overseas 未設定の場合は最近傍都道府県を自動付与
+          prefecture: item.prefecture ?? (
+            item.lat != null && item.lng != null && !item.overseas
+              ? (latLngToPrefecture(item.lat, item.lng) ?? undefined)
+              : undefined
+          ),
+        }))
+        .sort((a, b) => {
+          const oa = (a as Item & { displayOrder?: number }).displayOrder ?? 9999;
+          const ob = (b as Item & { displayOrder?: number }).displayOrder ?? 9999;
+          return oa - ob;
+        });
       setItems(sorted);
       setLoading(false);
     });

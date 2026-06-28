@@ -7,7 +7,7 @@ import { getDisplayName } from "../../pair/services/pairService";
 import { usePair } from "../../../contexts/PairContext";
 import { db } from "../../../firebase/firestore";
 import { doc, getDoc } from "firebase/firestore";
-import { CATEGORY_STYLE, CATEGORY_LABEL, CATEGORIES } from "../../../lib/constants";
+import { CATEGORY_STYLE, CATEGORY_LABEL, CATEGORIES, PREFECTURES, OVERSEAS_REGIONS, OVERSEAS_COUNTRIES } from "../../../lib/constants";
 import { BottomNav } from "../../../components/BottomNav";
 import { HomeGuide } from "../../setup/components/HomeGuide";
 import { addManualItem } from "../services/itemService";
@@ -88,10 +88,15 @@ export const HomePage = () => {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   });
   const [newCompletedHour, setNewCompletedHour] = useState(new Date().getHours());
+  const [newAreaMode, setNewAreaMode] = useState<"none" | "domestic" | "overseas">("none");
+  const [newPrefecture, setNewPrefecture] = useState("");
+  const [newOverseasRegion, setNewOverseasRegion] = useState<string>(OVERSEAS_REGIONS[0]);
+  const [newOverseasCountry, setNewOverseasCountry] = useState("");
   const [addSaving, setAddSaving] = useState(false);
   const [addedToast, setAddedToast] = useState(false);
   const modalContentRef = useRef<HTMLDivElement>(null);
   const touchStartY = useRef(0);
+  const touchStartFromHeader = useRef(false);
 
   const closeAddModal = () => {
     setShowAddModal(false);
@@ -106,17 +111,24 @@ export const HomePage = () => {
     return () => window.removeEventListener("popstate", handlePop);
   }, [showAddModal]);
 
+  const handleHeaderTouchStart = (e: React.TouchEvent) => {
+    touchStartY.current = e.touches[0].clientY;
+    touchStartFromHeader.current = true;
+  };
   const handleModalTouchStart = (e: React.TouchEvent) => {
     touchStartY.current = e.touches[0].clientY;
+    touchStartFromHeader.current = false;
   };
   const handleModalTouchEnd = (e: React.TouchEvent) => {
     const delta = e.changedTouches[0].clientY - touchStartY.current;
-    if (delta > 80 && (modalContentRef.current?.scrollTop ?? 0) === 0) closeAddModal();
+    const canClose = touchStartFromHeader.current || (modalContentRef.current?.scrollTop ?? 0) === 0;
+    if (delta > 60 && canClose) closeAddModal();
   };
 
   const resetAddModal = () => {
     setNewTitle(""); setNewCategory("other"); setNewType("indoor");
     setNewStatus("todo"); setNewRating(null); setNewMapsUrl(""); setNewMemo("");
+    setNewAreaMode("none"); setNewPrefecture(""); setNewOverseasRegion(OVERSEAS_REGIONS[0]); setNewOverseasCountry("");
     const d = new Date();
     setNewCompletedDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
     setNewCompletedHour(d.getHours());
@@ -130,6 +142,10 @@ export const HomePage = () => {
       const [y, m, d] = newCompletedDate.split("-").map(Number);
       completedAtDate = new Date(y, m - 1, d, newCompletedHour, 0, 0);
     }
+    const prefecture = newAreaMode === "domestic" && newPrefecture ? newPrefecture : undefined;
+    const overseas   = newAreaMode === "overseas"
+      ? (newOverseasCountry || newOverseasRegion)
+      : undefined;
     await addManualItem(pairId, {
       title: newTitle.trim(),
       category: newCategory,
@@ -139,6 +155,8 @@ export const HomePage = () => {
       memo: newMemo.trim() || null,
       userPlaceUrl: newMapsUrl.trim() || null,
       completedAtDate,
+      prefecture,
+      overseas,
     });
     setAddSaving(false);
     setShowAddModal(false);
@@ -189,8 +207,6 @@ export const HomePage = () => {
   const filteredGood  = applyAll(goodItems);
   const filteredTry   = applyAll(tryItems);
 
-  const progress = items.length > 0 ? doneItems.length / items.length : 0;
-
   if (pairLoading || loading) return <Loading message={pairLoading ? "データ確認中..." : "読み込み中..."} />;
 
   return (
@@ -201,7 +217,7 @@ export const HomePage = () => {
       <header style={{ flexShrink: 0, padding: "14px 20px 10px",
                        background: "var(--color-bg)", borderBottom: "1px solid rgba(0,0,0,0.07)",
                        position: "sticky", top: 0, zIndex: 20 }}>
-        {/* 左: タイトル + ペア名 ／ 右: ロゴ + 完了数 */}
+        {/* 左: タイトル + ペア名 ／ 右: ロゴ */}
         <div style={{ display: "flex", alignItems: "flex-start" }}>
           <div style={{ flex: 1 }}>
             <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 17, fontWeight: 600,
@@ -215,28 +231,8 @@ export const HomePage = () => {
               </p>
             )}
           </div>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
-            <img src="/logo.png" alt="KataLog" style={{ height: 20, objectFit: "contain" }} />
-            {items.length > 0 && (
-              <p style={{ fontSize: 11, color: "var(--color-text-soft)",
-                          fontFamily: "var(--font-sans)", margin: 0 }}>
-                <span style={{ fontWeight: 600, color: "var(--color-primary)", fontSize: 12 }}>
-                  {doneItems.length}
-                </span>
-                /{items.length} 完了
-              </p>
-            )}
-          </div>
+          <img src="/logo.png" alt="KataLog" style={{ height: 20, objectFit: "contain" }} />
         </div>
-        {/* 進捗バー */}
-        {items.length > 0 && (
-          <div style={{ height: 3, background: "rgba(0,0,0,0.08)",
-                        borderRadius: 2, overflow: "hidden", marginTop: 6 }}>
-            <div style={{ width: `${progress * 100}%`, height: "100%",
-                          background: "var(--color-primary)", borderRadius: 2,
-                          transition: "width 0.4s ease" }} />
-          </div>
-        )}
       </header>
 
       {/* ── フィルター + 並び替え ── */}
@@ -470,14 +466,16 @@ export const HomePage = () => {
       {/* ── 追加FAB ── */}
       <button data-guide="add-btn"
               onClick={() => setShowAddModal(true)}
-              style={{ position: "fixed", bottom: 88, right: 20, zIndex: 30,
-                       width: 52, height: 52, borderRadius: "50%",
-                       background: "#fff", color: "var(--color-primary)",
-                       border: "2px solid var(--color-primary)",
-                       fontSize: 26, cursor: "pointer",
-                       boxShadow: "0 4px 16px rgba(139, 139, 139, 0.2)",
-                       display: "flex", alignItems: "center", justifyContent: "center" }}>
-        +
+              style={{ position: "fixed", bottom: 88, right: 16, zIndex: 30,
+                       height: 44, borderRadius: 22, padding: "0 20px",
+                       background: "var(--color-primary)", color: "#fff",
+                       border: "none",
+                       fontSize: 13, fontWeight: 600, cursor: "pointer",
+                       boxShadow: "0 4px 16px rgba(139, 90, 43, 0.3)",
+                       display: "flex", alignItems: "center", justifyContent: "center",
+                       gap: 6, fontFamily: "var(--font-sans)" }}>
+        <span style={{ fontSize: 18, lineHeight: 1 }}>＋</span>
+        アイテム追加
       </button>
 
       {/* ── おすすめ度 内訳モーダル ── */}
@@ -517,15 +515,17 @@ export const HomePage = () => {
                style={{ width: "100%", background: "var(--color-bg)", borderRadius: "20px 20px 0 0",
                         padding: "12px 20px 48px", display: "flex", flexDirection: "column", gap: 16,
                         maxHeight: "90dvh", overflowY: "auto", scrollbarWidth: "none" }}>
-            {/* ドラッグインジケーター */}
-            <div style={{ display: "flex", justifyContent: "center", marginBottom: 4 }}>
-              <div style={{ width: 36, height: 4, borderRadius: 2,
-                            background: "rgba(0,0,0,0.15)" }} />
+            {/* ドラッグインジケーター + タイトル（このエリアをスワイプで閉じる） */}
+            <div onTouchStart={(e) => { handleHeaderTouchStart(e); e.stopPropagation(); }}>
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 4 }}>
+                <div style={{ width: 36, height: 4, borderRadius: 2,
+                              background: "rgba(0,0,0,0.15)" }} />
+              </div>
+              <h2 style={{ fontFamily: "var(--font-sans)", fontSize: 17, fontWeight: 500,
+                           color: "var(--color-text-main)", textAlign: "center" }}>
+                アイテム追加
+              </h2>
             </div>
-            <h2 style={{ fontFamily: "var(--font-sans)", fontSize: 17, fontWeight: 500,
-                         color: "var(--color-text-main)", textAlign: "center" }}>
-              リストに追加
-            </h2>
 
             {/* タイトル */}
             <div>
@@ -570,6 +570,61 @@ export const HomePage = () => {
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* エリア */}
+            <div>
+              <ModalLabel>エリア（任意）</ModalLabel>
+              <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                {([["none", "指定なし"], ["domestic", "🏠 国内"], ["overseas", "✈️ 海外"]] as const).map(([val, lbl]) => (
+                  <button key={val} onClick={() => setNewAreaMode(val)}
+                          style={{ flex: 1, padding: "8px", borderRadius: 8, fontSize: 12,
+                                   border: newAreaMode === val ? "none" : "1px solid rgba(0,0,0,0.12)",
+                                   background: newAreaMode === val ? "var(--color-text-main)" : "transparent",
+                                   color: newAreaMode === val ? "var(--color-bg)" : "#5C4A35",
+                                   cursor: "pointer", fontFamily: "var(--font-sans)" }}>
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+              {newAreaMode === "domestic" && (
+                <select value={newPrefecture} onChange={(e) => setNewPrefecture(e.target.value)}
+                        style={{ width: "100%", padding: "8px 10px", borderRadius: 8, fontSize: 13,
+                                 border: "1px solid var(--color-border)", background: "var(--color-bg)",
+                                 color: newPrefecture ? "var(--color-text-main)" : "var(--color-text-soft)",
+                                 fontFamily: "var(--font-sans)" }}>
+                  <option value="">都道府県（任意）</option>
+                  <option value="全国">🗾 全国</option>
+                  {PREFECTURES.map((p) => <option key={p} value={p}>{p}</option>)}
+                </select>
+              )}
+              {newAreaMode === "overseas" && (
+                <>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+                    {OVERSEAS_REGIONS.map((r) => (
+                      <button key={r}
+                              onClick={() => { setNewOverseasRegion(r); setNewOverseasCountry(""); }}
+                              style={{ padding: "5px 12px", borderRadius: 20, fontSize: 12, cursor: "pointer",
+                                       border: newOverseasRegion === r ? "none" : "1px solid rgba(0,0,0,0.12)",
+                                       background: newOverseasRegion === r ? "var(--color-text-main)" : "transparent",
+                                       color: newOverseasRegion === r ? "var(--color-bg)" : "#5C4A35",
+                                       fontFamily: "var(--font-sans)" }}>
+                        {r}
+                      </button>
+                    ))}
+                  </div>
+                  <select value={newOverseasCountry} onChange={(e) => setNewOverseasCountry(e.target.value)}
+                          style={{ width: "100%", padding: "8px 10px", borderRadius: 8, fontSize: 13,
+                                   border: "1px solid var(--color-border)", background: "var(--color-bg)",
+                                   color: newOverseasCountry ? "var(--color-text-main)" : "var(--color-text-soft)",
+                                   fontFamily: "var(--font-sans)" }}>
+                    <option value="">国を選択（任意）</option>
+                    {(OVERSEAS_COUNTRIES[newOverseasRegion] ?? []).map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </>
+              )}
             </div>
 
             {/* 状態 */}
@@ -687,6 +742,7 @@ const SectionLabel = ({ children, style }: { children: React.ReactNode; style?: 
 const ScoreBreakdownModal = ({ item, bd, onClose }: {
   item: Item; bd: ScoreBreakdown; onClose: () => void;
 }) => {
+  const hasArea = !!(item.prefecture || item.overseas);
   const rows: { label: string; pts: number; na: boolean; icon: string }[] = [
     { label: "カテゴリ一致",  pts: bd.genres,    na: false,                         icon: bd.genres > 0    ? "✓" : "✗" },
     { label: "屋内外一致",    pts: bd.indoor,    na: false,                         icon: bd.indoor > 0    ? "✓" : "✗" },
@@ -695,6 +751,7 @@ const ScoreBreakdownModal = ({ item, bd, onClose }: {
     { label: "予算",          pts: bd.budget,    na: item.budgetLevel === undefined,  icon: bd.budget >= 15  ? "✓" : bd.budget > 0 ? "△" : item.budgetLevel === undefined ? "−" : "✗" },
     { label: "今の季節",      pts: bd.season,    na: item.seasonBest === undefined,  icon: bd.season > 0    ? "✓" : item.seasonBest === undefined ? "−" : "✗" },
     { label: "天気補正",      pts: bd.weather,   na: item.weatherSensitive === undefined, icon: bd.weather > 0 ? "✓" : bd.weather < 0 ? "✗" : "−" },
+    { label: "エリア一致",    pts: bd.area,      na: !hasArea,                      icon: bd.area >= 10 ? "✓" : bd.area > 0 ? "△" : !hasArea ? "−" : "✗" },
   ];
   return (
     <div onClick={onClose}

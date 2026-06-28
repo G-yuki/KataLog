@@ -27,11 +27,11 @@ export const HearingPage = () => {
   const [hearing, setHearing] = useState<Partial<Hearing>>({
     genres: [],
     prefecture: "",
-    range: "",
-    children: "",
-    transport: "",
-    budget: "",
-    indoor: "",
+    range: undefined,
+    children: undefined,
+    transport: undefined,
+    budget: undefined,
+    indoor: undefined,
     freetext: "",
   });
 
