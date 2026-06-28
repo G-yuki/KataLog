@@ -103,7 +103,7 @@ export const resetPairList = async (pairId: string): Promise<void> => {
 /** Suggest で選択したアイテムをリストに直接追加 */
 export const addSuggestedItems = async (
   pairId: string,
-  drafts: { title: string; category: string; type: string; difficulty: string }[]
+  drafts: import("../../../types").ItemDraft[]
 ): Promise<void> => {
   const batch = writeBatch(db);
   drafts.forEach((draft) => {

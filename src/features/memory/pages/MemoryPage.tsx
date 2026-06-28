@@ -7,8 +7,9 @@ import { useItems } from "../../items/hooks/useItems";
 import { usePair } from "../../../contexts/PairContext";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../../../firebase/functions";
-import { CATEGORY_STYLE } from "../../../lib/constants";
+import { CATEGORY_STYLE, CATEGORY_LABEL } from "../../../lib/constants";
 import { type Timestamp } from "firebase/firestore";
+import type { Item } from "../../../types";
 
 const todayYM = () => {
   const d = new Date();
@@ -38,6 +39,13 @@ const getAiLabel = (start: string, end: string): string => {
 
 const fmtMonthYear = (d: Date, multiYear: boolean) =>
   multiYear ? `${d.getFullYear()}/${d.getMonth() + 1}月` : `${d.getMonth() + 1}月`;
+
+const heroUrl = (item: Item): string | null => {
+  if (item.pinnedPhotoUrl) return item.pinnedPhotoUrl;
+  if (item.userPhotos?.length) return item.userPhotos[0];
+  if (item.placePhotoRef?.startsWith("https://")) return item.placePhotoRef;
+  return null;
+};
 
 export const MemoryPage = () => {
   const navigate = useNavigate();
@@ -242,13 +250,22 @@ export const MemoryPage = () => {
               リストのアイテムを体験したら<br />「完了」にチェックしましょう。<br />
               AIがふたりの思い出を文章にしてくれます。
             </p>
-            <button onClick={() => navigate("/home")}
-                    style={{ marginTop: 24, padding: "12px 28px",
-                             background: "var(--color-primary)", color: "#fff",
-                             border: "none", borderRadius: 24, fontSize: 13, fontWeight: 500,
-                             cursor: "pointer", fontFamily: "var(--font-sans)" }}>
-              リストを見る
-            </button>
+            <div style={{ marginTop: 24, display: "flex", flexDirection: "column", gap: 10, alignItems: "center" }}>
+              <button onClick={() => navigate("/home")}
+                      style={{ padding: "12px 28px",
+                               background: "var(--color-primary)", color: "#fff",
+                               border: "none", borderRadius: 24, fontSize: 13, fontWeight: 500,
+                               cursor: "pointer", fontFamily: "var(--font-sans)" }}>
+                リストを見る
+              </button>
+              <button onClick={() => navigate("/suggest")}
+                      style={{ padding: "10px 24px", background: "transparent",
+                               color: "var(--color-primary)", border: "1px solid var(--color-primary)",
+                               borderRadius: 24, fontSize: 13, fontWeight: 500,
+                               cursor: "pointer", fontFamily: "var(--font-sans)" }}>
+                おすすめ体験へ →
+              </button>
+            </div>
           </div>
         ) : (
           <div style={{ padding: "20px 20px 40px", display: "flex", flexDirection: "column", gap: 24 }}>
@@ -279,9 +296,19 @@ export const MemoryPage = () => {
               <div style={{ padding: "32px 24px", textAlign: "center",
                             background: "#fff", borderRadius: 14,
                             border: "1px solid rgba(0,0,0,0.07)" }}>
-                <p style={{ fontSize: 13, color: "var(--color-text-soft)" }}>
+                <p style={{ fontSize: 13, color: "var(--color-text-soft)", marginBottom: 16 }}>
                   {periodLabel}に完了した体験はありません
                 </p>
+                <p style={{ fontSize: 12, color: "var(--color-text-mid)", marginBottom: 14, lineHeight: 1.6 }}>
+                  次の体験を探しに行きましょう！
+                </p>
+                <button onClick={() => navigate("/suggest")}
+                        style={{ padding: "10px 24px", background: "transparent",
+                                 color: "var(--color-primary)", border: "1px solid var(--color-primary)",
+                                 borderRadius: 24, fontSize: 13, fontWeight: 500,
+                                 cursor: "pointer", fontFamily: "var(--font-sans)" }}>
+                  ✦ おすすめ体験へ →
+                </button>
               </div>
             ) : (
               <>
@@ -299,7 +326,7 @@ export const MemoryPage = () => {
                         ? (filteredDoneItems[idx - 1].completedAt as Timestamp).toDate() : null;
                       const prevKey = prevD ? `${prevD.getFullYear()}-${prevD.getMonth()}` : null;
                       const showMonth = monthKey !== prevKey;
-                      const s = CATEGORY_STYLE[item.category] ?? CATEGORY_STYLE["その他"];
+                      const s = CATEGORY_STYLE[item.category] ?? CATEGORY_STYLE["other"];
 
                       return (
                         <Fragment key={item.itemId}>
@@ -318,10 +345,14 @@ export const MemoryPage = () => {
                                      background: "#fff", borderRadius: 10, textAlign: "left",
                                      border: "1px solid rgba(0,0,0,0.06)", padding: "10px 14px",
                                      cursor: "pointer" }}>
-                            <div style={{ width: 34, height: 34, borderRadius: 8, flexShrink: 0,
+                            <div style={{ width: 46, height: 46, borderRadius: 10, flexShrink: 0,
+                                          overflow: "hidden", position: "relative",
                                           background: s.bg, display: "flex", alignItems: "center",
-                                          justifyContent: "center", fontSize: 16 }}>
-                              {s.emoji}
+                                          justifyContent: "center", fontSize: 20 }}>
+                              {heroUrl(item) ? (
+                                <img src={heroUrl(item)!} alt={item.title} loading="lazy"
+                                     style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                              ) : s.emoji}
                             </div>
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <p style={{ fontSize: 13, fontWeight: 500, color: "var(--color-text-main)",
@@ -329,8 +360,8 @@ export const MemoryPage = () => {
                                 {item.title}
                               </p>
                               <p style={{ fontSize: 10, color: "var(--color-text-soft)", marginTop: 2 }}>
-                                {item.category}
-                                {item.rating != null && ` · ${"★".repeat(item.rating)}`}
+                                {CATEGORY_LABEL[item.category] ?? item.category}
+                                {item.rating != null && ` · ${"★".repeat(item.rating) + "☆".repeat(5 - item.rating)}`}
                               </p>
                             </div>
                             {item.memo && (

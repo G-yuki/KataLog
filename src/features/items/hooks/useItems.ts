@@ -56,6 +56,7 @@ export const useItems = (pairId: string | null) => {
       completedAt?: Timestamp | null;
       userPhotos?: string[];
       pinnedPhotoUrl?: string | null;
+      headerPosY?: number | null;
     }
   ) => {
     if (!pairId) return Promise.resolve();

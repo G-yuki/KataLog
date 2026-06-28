@@ -11,15 +11,17 @@ import { doc, getDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { storage } from "../../../firebase/storage";
 import type { Item } from "../../../types";
-
-const PLACE_CATEGORIES = ["おでかけ", "食事", "スポーツ", "映画", "音楽"] as const;
+import { PLACE_CATEGORIES, CATEGORY_LABEL } from "../../../lib/constants";
 const MAX_PHOTOS = 20;
 const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
 const ALLOWED_EXT  = new Set(["jpg", "jpeg", "png", "gif", "webp"]);
 
-// /maps/search 形式はルート案内でなく場所検索として開く
-const mapsSearchUrl = (title: string) =>
-  `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(title)}`;
+// placeId があれば特定スポットを開く。なければタイトル検索（地名なし → 現在地周辺になる）
+const mapsUrl = (item: Pick<Item, "userPlaceUrl" | "placeId" | "title">) => {
+  if (item.userPlaceUrl) return item.userPlaceUrl;
+  if (item.placeId) return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.title)}&query_place_id=${item.placeId}`;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.title)}`;
+};
 
 
 export const ItemDetailPage = () => {
@@ -49,6 +51,13 @@ export const ItemDetailPage = () => {
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const [showPhotoDeleteConfirm, setShowPhotoDeleteConfirm] = useState(false);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const [headerPosY, setHeaderPosY] = useState(50);
+  const [showHeaderAdjust, setShowHeaderAdjust] = useState(false);
+  const [adjPosY, setAdjPosY] = useState(50);
+  const [photoNaturalSize, setPhotoNaturalSize] = useState<{ w: number; h: number } | null>(null);
+  const adjustOverlayRef = useRef<HTMLDivElement>(null);
+  const adjPosYRef = useRef(50);
+  const photoExcessRef = useRef(0);
   const enrichCalled = useRef(false);
 
   useEffect(() => {
@@ -70,12 +79,44 @@ export const ItemDetailPage = () => {
     return null;
   }, [item?.pinnedPhotoUrl, item?.placePhotoRef, userPhotosList.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => { adjPosYRef.current = adjPosY; }, [adjPosY]);
+
   useEffect(() => {
     if (!item) return;
     // memoChanged=true（編集中）のときは Firestore 更新でユーザー入力を上書きしない
     if (!memoChanged) setMemo(item.memo ?? "");
     setRating(item.rating ?? null);
+    setHeaderPosY(item.headerPosY ?? 50);
   }, [item]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!showHeaderAdjust) return;
+    const el = adjustOverlayRef.current;
+    if (!el) return;
+    const drag = { startY: 0, startPos: 0, active: false };
+    const onStart = (e: TouchEvent) => {
+      drag.startY = e.touches[0].clientY;
+      drag.startPos = adjPosYRef.current;
+      drag.active = true;
+    };
+    const onMove = (e: TouchEvent) => {
+      if (!drag.active) return;
+      e.preventDefault();
+      const excess = photoExcessRef.current;
+      if (excess <= 0) return;
+      const delta = e.touches[0].clientY - drag.startY;
+      setAdjPosY(Math.max(0, Math.min(100, drag.startPos - delta * 100 / excess)));
+    };
+    const onEnd = () => { drag.active = false; };
+    el.addEventListener("touchstart", onStart);
+    el.addEventListener("touchmove", onMove, { passive: false });
+    el.addEventListener("touchend", onEnd);
+    return () => {
+      el.removeEventListener("touchstart", onStart);
+      el.removeEventListener("touchmove", onMove);
+      el.removeEventListener("touchend", onEnd);
+    };
+  }, [showHeaderAdjust]);
 
   // Places エンリッチ: placeId===null（未検索）のときだけ呼ぶ
   // placeId===""  → 検索済み・場所なし or Step1失敗で確定済み → スキップ
@@ -168,6 +209,13 @@ export const ItemDetailPage = () => {
     const { Timestamp } = await import("firebase/firestore");
     await saveDetail(item.itemId, { completedAt: Timestamp.fromDate(date) });
     setEditingCompletedAt(false);
+  };
+
+  const handleAdjustSave = async () => {
+    if (!item) return;
+    setHeaderPosY(adjPosY);
+    setShowHeaderAdjust(false);
+    await saveDetail(item.itemId, { headerPosY: adjPosY });
   };
 
   const handleDelete = async () => {
@@ -299,13 +347,16 @@ export const ItemDetailPage = () => {
 
       {/* ── 固定ヘッダー（写真あり / なし） ── */}
       {hasPhoto ? (
-        <div style={{ position: "relative", width: "100%", height: 220, flexShrink: 0 }}>
+        <div style={{ position: "relative", width: "100%", height: 220, flexShrink: 0, overflow: "hidden" }}>
           <img
             src={headerPhotoUrl!}
             alt={item.title}
-            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            onClick={() => { setAdjPosY(headerPosY); setShowHeaderAdjust(true); }}
+            style={{ width: "100%", height: "100%", objectFit: "cover",
+                     objectPosition: `center ${headerPosY}%`,
+                     display: "block", cursor: "pointer", userSelect: "none" }}
           />
-          <div style={{ position: "absolute", inset: 0,
+          <div style={{ position: "absolute", inset: 0, pointerEvents: "none",
                         background: "linear-gradient(to bottom, rgba(0,0,0,0.35) 0%, transparent 50%, rgba(0,0,0,0.5) 100%)" }} />
           {/* 戻るボタン（写真上） */}
           <button onClick={() => navigate(backTo)}
@@ -397,7 +448,7 @@ export const ItemDetailPage = () => {
 
         {/* カテゴリ・タグ */}
         <div className="flex gap-2 mb-5 flex-wrap items-center">
-          <Tag label={item.category} />
+          <Tag label={CATEGORY_LABEL[item.category] ?? item.category} />
           <Tag label={item.type === "outdoor" ? "屋外" : "屋内"} />
           {isEnriching && (
             <span style={{ fontSize: 11, color: "var(--color-text-soft)" }}>
@@ -426,15 +477,22 @@ export const ItemDetailPage = () => {
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
               {(isPlaceCategory || item.userPlaceUrl) ? (
                 <a
-                  href={item.userPlaceUrl ?? mapsSearchUrl(item.title)}
+                  href={mapsUrl(item)}
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{ textDecoration: "none", flex: 1, display: "flex", alignItems: "center", gap: 12 }}
                 >
                   <span style={{ fontSize: 20, flexShrink: 0 }}>🗺️</span>
-                  <span style={{ fontSize: 14, fontWeight: 600, color: "var(--color-primary)" }}>
-                    Googleマップで見る
-                  </span>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: "var(--color-primary)" }}>
+                      Googleマップで見る
+                    </span>
+                    {item.placeName && (
+                      <span style={{ fontSize: 11, color: "var(--color-text-soft)" }}>
+                        {item.placeName}
+                      </span>
+                    )}
+                  </div>
                   <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0, marginLeft: 4 }}>
                     <path d="M3 11L11 3M11 3H6M11 3V8" stroke="var(--color-primary)"
                           strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
@@ -791,6 +849,75 @@ export const ItemDetailPage = () => {
                 </button>
               </div>
             )}
+          </div>
+        );
+      })()}
+
+      {/* ── ヘッダー写真位置調整ポップアップ ── */}
+      {showHeaderAdjust && (() => {
+        const screenW = window.innerWidth;
+        const screenH = window.innerHeight;
+        const frameTop = Math.floor((screenH - 220) / 2); // 選択枠を画面中央に固定
+        const displayedH = photoNaturalSize
+          ? screenW * photoNaturalSize.h / photoNaturalSize.w
+          : 0;
+        const photoExcess = Math.max(0, displayedH - 220);
+        photoExcessRef.current = photoExcess;
+        // 写真の top: 選択枠の上端に adjPosY% の位置が来るよう上下シフト
+        const photoTop = frameTop - (adjPosY / 100) * photoExcess;
+
+        return (
+          <div ref={adjustOverlayRef}
+               style={{ position: "fixed", inset: 0, zIndex: 300, overflow: "hidden" }}>
+            {/* 写真：自然縦幅・中央枠に対して上下シフト */}
+            <img
+              src={headerPhotoUrl!}
+              alt=""
+              onLoad={(e) => {
+                const img = e.currentTarget;
+                setPhotoNaturalSize({ w: img.naturalWidth, h: img.naturalHeight });
+              }}
+              style={{ position: "absolute", top: photoTop, left: 0,
+                       width: "100%", height: "auto", display: "block",
+                       pointerEvents: "none", userSelect: "none" }}
+            />
+            {/* 上部暗いオーバーレイ（選択枠より上） */}
+            <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: frameTop,
+                          background: "rgba(0,0,0,0.58)", pointerEvents: "none" }} />
+            {/* 選択枠：中央・白枠のみ・中は透明 */}
+            <div style={{ position: "absolute", top: frameTop, left: 0, right: 0, height: 220,
+                          border: "2px solid rgba(255,255,255,0.8)", boxSizing: "border-box",
+                          pointerEvents: "none" }} />
+            {/* 下部暗いオーバーレイ（選択枠より下） */}
+            <div style={{ position: "absolute", top: frameTop + 220, left: 0, right: 0, bottom: 0,
+                          background: "rgba(0,0,0,0.58)", pointerEvents: "none" }} />
+            {/* 操作説明（選択枠の下） */}
+            <div style={{ position: "absolute", top: frameTop + 228, left: 0, right: 0,
+                          textAlign: "center", pointerEvents: "none" }}>
+              <span style={{ fontSize: 13, color: "rgba(255,255,255,0.85)",
+                             textShadow: "0 1px 4px rgba(0,0,0,0.7)" }}>
+                ↕ 上下にドラッグして位置を調整
+              </span>
+            </div>
+            {/* ボタン行 */}
+            <div style={{ position: "absolute", bottom: 48, left: 0, right: 0,
+                          display: "flex", gap: 12, padding: "0 24px" }}>
+              <button
+                onClick={() => setShowHeaderAdjust(false)}
+                style={{ flex: 1, padding: "14px 0", borderRadius: 12,
+                         background: "rgba(255,255,255,0.18)", border: "1px solid rgba(255,255,255,0.35)",
+                         color: "#fff", fontSize: 15, cursor: "pointer", fontFamily: "var(--font-sans)" }}>
+                キャンセル
+              </button>
+              <button
+                onClick={handleAdjustSave}
+                style={{ flex: 1, padding: "14px 0", borderRadius: 12,
+                         background: "rgba(255,255,255,0.92)", border: "none",
+                         color: "#222", fontSize: 15, fontWeight: 700,
+                         cursor: "pointer", fontFamily: "var(--font-sans)" }}>
+                完了
+              </button>
+            </div>
           </div>
         );
       })()}

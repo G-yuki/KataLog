@@ -101,11 +101,31 @@ export const SuggestPage = () => {
   const handleUpdateAndGenerate = async () => {
     if (!pairId) return;
     const merged = { ...hearing, ...editHearing } as Hearing;
-    await updateDoc(doc(db, "pairs", pairId), {
-      hearing: { ...merged, updatedAt: serverTimestamp() },
-    });
+    setGenError(null);
+    setStep("generating");
+    try {
+      const hearingToSave = Object.fromEntries(
+        Object.entries({ ...merged, updatedAt: serverTimestamp() }).filter(([, v]) => v !== undefined)
+      );
+      await updateDoc(doc(db, "pairs", pairId), { hearing: hearingToSave });
+    } catch (e) {
+      console.error("handleUpdateAndGenerate updateDoc failed:", e);
+      setGenError("プランの保存に失敗しました。もう一度お試しください。");
+      setStep("home");
+      return;
+    }
     setHearing(merged);
-    await handleGenerate(merged);
+    const existingTitles = existingItems.map((i) => i.title);
+    const items = await generate(merged, existingTitles);
+    if (items) {
+      setSuggestions(items);
+      setSelected(new Set());
+      updateDoc(doc(db, "pairs", pairId), { pendingSuggestions: items }).catch(() => {});
+      setStep("results");
+    } else {
+      setGenError("提案の生成に失敗しました。もう一度お試しください。");
+      setStep("home");
+    }
   };
 
   const toggleSelect = (i: number) => {
@@ -281,7 +301,7 @@ export const SuggestPage = () => {
             </p>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               {suggestions.map((item, i) => {
-                const s = CATEGORY_STYLE[item.category] ?? CATEGORY_STYLE["その他"];
+                const s = CATEGORY_STYLE[item.category] ?? CATEGORY_STYLE["other"];
                 const isSelected = selected.has(i);
                 return (
                   <button key={i} onClick={() => toggleSelect(i)}
@@ -524,7 +544,9 @@ const UpdateHearingForm = ({
       <FormSection label="活動エリア">
         {/* 国内 / 海外 トグル */}
         <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
-          <ToggleChip selected={!isOverseas} onClick={() => set("overseas", undefined)}>
+          <ToggleChip selected={!isOverseas} onClick={() => {
+            onChange({ ...hearing, overseas: undefined, range: hearing.range ?? "neighbor" });
+          }}>
             🏠 国内
           </ToggleChip>
           <ToggleChip selected={isOverseas} onClick={() => {
@@ -666,7 +688,8 @@ const UpdateHearingForm = ({
       <button onClick={onSubmit} disabled={!canSubmit || submitting}
               style={{ width: "100%", padding: "16px", background: "var(--color-primary)",
                        color: "#fff", border: "none", borderRadius: 14, fontSize: 15,
-                       fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-sans)",
+                       fontWeight: 600, cursor: !canSubmit || submitting ? "default" : "pointer",
+                       fontFamily: "var(--font-sans)",
                        opacity: !canSubmit || submitting ? 0.5 : 1 }}>
         {submitting ? "提案を生成中..." : "✦ 更新してAIに提案"}
       </button>

@@ -33,14 +33,17 @@ export interface Pair {
 
 // ── アイテム ──────────────────────────────────
 export type Category =
-  | "おでかけ"
-  | "映画"
-  | "本"
-  | "ゲーム"
-  | "食事"
-  | "音楽"
-  | "スポーツ"
-  | "その他";
+  | "nature"
+  | "gourmet"
+  | "art"
+  | "music"
+  | "sports"
+  | "movie"
+  | "book"
+  | "game"
+  | "theme"
+  | "onsen"
+  | "other";
 
 export type ItemType = "outdoor" | "indoor";
 export type Difficulty = "easy" | "special";
@@ -69,8 +72,16 @@ export interface Item {
   lat: number | null;
   lng: number | null;
   userPlaceUrl?: string | null;
-  userPhotos?: string[];        // ユーザーアップロード写真のStorage URL配列
+  placeTypes?: string[] | null;  // Places API types（移行・スコアリング用）
+  userPhotos?: string[];         // ユーザーアップロード写真のStorage URL配列
   pinnedPhotoUrl?: string | null; // ヘッダーに固定するユーザー写真URL
+  headerPosY?: number;           // ヘッダー写真の縦位置 (0〜100, default 50)
+  // スコアリング用メタ（AIが生成・既存アイテムはバッチで補完）
+  budgetLevel?: 1 | 2 | 3 | 4;  // 1:〜¥3000 / 2:〜¥5000 / 3:〜¥10000 / 4:〜¥30000
+  kidsFriendly?: boolean;
+  access?: "transit" | "car" | "both";
+  weatherSensitive?: boolean;
+  seasonBest?: ("spring" | "summer" | "autumn" | "winter")[];
 }
 
 // AI生成時のアイテム（Firestore保存前）
@@ -79,6 +90,11 @@ export interface ItemDraft {
   category: Category;
   type: ItemType;
   difficulty: Difficulty;
+  budgetLevel?: 1 | 2 | 3 | 4;
+  kidsFriendly?: boolean;
+  access?: "transit" | "car" | "both";
+  weatherSensitive?: boolean;
+  seasonBest?: ("spring" | "summer" | "autumn" | "winter")[];
 }
 
 // ふたりのスワイプ結果保存用（マッチング前）

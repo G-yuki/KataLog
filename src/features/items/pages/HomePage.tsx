@@ -7,7 +7,7 @@ import { getDisplayName } from "../../pair/services/pairService";
 import { usePair } from "../../../contexts/PairContext";
 import { db } from "../../../firebase/firestore";
 import { doc, getDoc } from "firebase/firestore";
-import { CATEGORY_STYLE } from "../../../lib/constants";
+import { CATEGORY_STYLE, CATEGORY_LABEL, CATEGORIES } from "../../../lib/constants";
 import { BottomNav } from "../../../components/BottomNav";
 import { HomeGuide } from "../../setup/components/HomeGuide";
 import { addManualItem } from "../services/itemService";
@@ -15,7 +15,6 @@ import type { Item, Category, ItemType, ItemStatus } from "../../../types";
 
 type Filter = "all" | Category;
 
-const CATEGORIES: Category[] = ["おでかけ", "映画", "食事", "本", "ゲーム", "音楽", "スポーツ", "その他"];
 // ヘッダー写真の優先順: pinnedPhotoUrl → userPhotos[0] → placePhotoRef(Storage URLのみ)
 const heroUrl = (item: Item): string | null => {
   if (item.pinnedPhotoUrl) return item.pinnedPhotoUrl;
@@ -28,14 +27,13 @@ export const HomePage = () => {
   const navigate = useNavigate();
   const { pairId, loading: pairLoading } = usePair();
   const [pairNames, setPairNames] = useState("");
-  const { items, loading, setStatus, toggleIsWant, removeItem } = useItems(pairId);
+  const { items, loading } = useItems(pairId);
 
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
   const [doneOpen, setDoneOpen] = useState(false);
   const [showGuide, setShowGuide] = useState(() => !localStorage.getItem("homeGuideSeen"));
   const [guideDetailOpen, setGuideDetailOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
 
   const applySearch = (arr: Item[]): Item[] => {
@@ -80,7 +78,7 @@ export const HomePage = () => {
   // 手動追加モーダル
   const [showAddModal, setShowAddModal] = useState(false);
   const [newTitle, setNewTitle] = useState("");
-  const [newCategory, setNewCategory] = useState<Category>("その他");
+  const [newCategory, setNewCategory] = useState<Category>("other");
   const [newType, setNewType] = useState<ItemType>("indoor");
   const [newStatus, setNewStatus] = useState<ItemStatus>("todo");
   const [newRating, setNewRating] = useState<number | null>(null);
@@ -93,9 +91,32 @@ export const HomePage = () => {
   const [newCompletedHour, setNewCompletedHour] = useState(new Date().getHours());
   const [addSaving, setAddSaving] = useState(false);
   const [addedToast, setAddedToast] = useState(false);
+  const modalContentRef = useRef<HTMLDivElement>(null);
+  const touchStartY = useRef(0);
+
+  const closeAddModal = () => {
+    setShowAddModal(false);
+    if (window.history.state?.modal === "add") window.history.back();
+  };
+
+  useEffect(() => {
+    if (!showAddModal) return;
+    window.history.pushState({ modal: "add" }, "");
+    const handlePop = () => setShowAddModal(false);
+    window.addEventListener("popstate", handlePop);
+    return () => window.removeEventListener("popstate", handlePop);
+  }, [showAddModal]);
+
+  const handleModalTouchStart = (e: React.TouchEvent) => {
+    touchStartY.current = e.touches[0].clientY;
+  };
+  const handleModalTouchEnd = (e: React.TouchEvent) => {
+    const delta = e.changedTouches[0].clientY - touchStartY.current;
+    if (delta > 80 && (modalContentRef.current?.scrollTop ?? 0) === 0) closeAddModal();
+  };
 
   const resetAddModal = () => {
-    setNewTitle(""); setNewCategory("その他"); setNewType("indoor");
+    setNewTitle(""); setNewCategory("other"); setNewType("indoor");
     setNewStatus("todo"); setNewRating(null); setNewMapsUrl(""); setNewMemo("");
     const d = new Date();
     setNewCompletedDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
@@ -221,7 +242,7 @@ export const HomePage = () => {
                              border: filter === f ? "none" : "1px solid rgba(0,0,0,0.12)",
                              background: filter === f ? "var(--color-text-main)" : "transparent",
                              color: filter === f ? "var(--color-bg)" : "#5C4A35" }}>
-              {f === "all" ? "すべて" : f}
+              {f === "all" ? "すべて" : (CATEGORY_LABEL[f] ?? f)}
             </button>
           ))}
         </div>
@@ -263,10 +284,7 @@ export const HomePage = () => {
                           overflowX: "auto", scrollbarWidth: "none" }}>
               {sortedGoItems.map((item) => (
                 <GoCard key={item.itemId} item={item}
-                        onClick={() => navigateToDetail(item.itemId)}
-                        onDone={() => setStatus(item.itemId, "done")}
-                        onWant={() => toggleIsWant(item.itemId, item.isWant)}
-                        onDelete={() => setDeleteTarget(item.itemId)} />
+                        onClick={() => navigateToDetail(item.itemId)} />
               ))}
             </div>
           </div>
@@ -278,13 +296,16 @@ export const HomePage = () => {
             <>
               <SectionLabel>おすすめ</SectionLabel>
               <div style={{ padding: "0 20px 4px",
-                            display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                            display: "grid",
+                            gridTemplateRows: "repeat(1, calc((50vw - 25px) * 0.618))",
+                            gridAutoFlow: "column",
+                            gridAutoColumns: "calc(50vw - 25px)",
+                            gap: 10,
+                            overflowX: "auto",
+                            scrollbarWidth: "none" }}>
                 {filteredGood.map((item) => (
                   <GoodCard key={item.itemId} item={item}
-                            onTap={() => navigateToDetail(item.itemId)}
-                            onWant={() => toggleIsWant(item.itemId, item.isWant)}
-                            onDone={() => setStatus(item.itemId, "done")}
-                            onDelete={() => setDeleteTarget(item.itemId)} />
+                            onTap={() => navigateToDetail(item.itemId)} />
                 ))}
               </div>
             </>
@@ -307,13 +328,16 @@ export const HomePage = () => {
           <div style={{ borderTop: "1px solid rgba(0,0,0,0.05)" }}>
             <SectionLabel>試してみる？</SectionLabel>
             <div style={{ padding: "0 20px 4px",
-                          display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                          display: "grid",
+                          gridTemplateRows: "repeat(1, calc((50vw - 25px) * 0.618))",
+                          gridAutoFlow: "column",
+                          gridAutoColumns: "calc(50vw - 25px)",
+                          gap: 10,
+                          overflowX: "auto",
+                          scrollbarWidth: "none" }}>
               {filteredTry.map((item) => (
                 <GoodCard key={item.itemId} item={item}
-                          onTap={() => navigateToDetail(item.itemId)}
-                          onWant={() => toggleIsWant(item.itemId, item.isWant)}
-                          onDone={() => setStatus(item.itemId, "done")}
-                          onDelete={() => setDeleteTarget(item.itemId)} />
+                          onTap={() => navigateToDetail(item.itemId)} />
               ))}
             </div>
           </div>
@@ -324,21 +348,26 @@ export const HomePage = () => {
           <>
             <button onClick={() => setDoneOpen((o) => !o)}
                     style={{ width: "100%", display: "flex", alignItems: "center",
-                             padding: "12px 20px 8px", background: "var(--color-bg)", border: "none",
-                             borderTop: "1px solid rgba(0,0,0,0.05)", cursor: "pointer",
-                             position: "sticky", top: 0, zIndex: 10 }}>
+                             padding: "12px 20px 8px", background: "transparent", border: "none",
+                             borderTop: "1px solid rgba(0,0,0,0.05)", cursor: "pointer" }}>
               <span style={{ fontSize: 12, color: "var(--color-text-mid)",
                              fontFamily: "var(--font-sans)", fontWeight: 600, flex: 1, textAlign: "left" }}>
-                {doneOpen ? `完了済み ${doneItems.length}件を閉じる ▲`
-                          : `完了済み ${doneItems.length}件を開く ▼`}
+                {doneOpen ? "最新の思い出　閉じる ▲" : "最新の思い出　開く ▼"}
               </span>
             </button>
             {doneOpen && (
               <div style={{ padding: "0 20px" }}>
-                {doneItems.map((item) => (
+                {doneItems.slice(0, 10).map((item) => (
                   <DoneRow key={item.itemId} item={item}
                            onTap={() => navigateToDetail(item.itemId)} />
                 ))}
+                <button onClick={() => navigate("/memory")}
+                        style={{ width: "100%", padding: "12px 0", background: "transparent",
+                                 border: "none", cursor: "pointer", textAlign: "center",
+                                 fontSize: 12, color: "var(--color-primary)",
+                                 fontFamily: "var(--font-sans)" }}>
+                  これまでの思い出は<span style={{ fontWeight: 700 }}>こちら</span>
+                </button>
               </div>
             )}
           </>
@@ -392,51 +421,24 @@ export const HomePage = () => {
         </>
       )}
 
-      {/* ── 削除確認ダイアログ ── */}
-      {deleteTarget && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)",
-                      display: "flex", alignItems: "flex-end", zIndex: 150 }}
-             onClick={() => setDeleteTarget(null)}>
-          <div onClick={(e) => e.stopPropagation()}
-               style={{ width: "100%", background: "var(--color-bg)",
-                        borderRadius: "20px 20px 0 0", padding: "28px 20px 48px",
-                        display: "flex", flexDirection: "column", gap: 8 }}>
-            <p style={{ fontSize: 15, fontWeight: 600, color: "var(--color-text-main)",
-                        textAlign: "center", fontFamily: "var(--font-sans)" }}>
-              このアイテムを削除しますか？
-            </p>
-            <p style={{ fontSize: 12, color: "var(--color-text-soft)",
-                        textAlign: "center", fontFamily: "var(--font-sans)", marginBottom: 8 }}>
-              削除すると元に戻せません
-            </p>
-            <button onClick={() => { removeItem(deleteTarget); setDeleteTarget(null); }}
-                    style={{ width: "100%", padding: "14px", borderRadius: 12,
-                             background: "#E53E3E", color: "#fff", border: "none",
-                             fontSize: 15, fontWeight: 600, cursor: "pointer",
-                             fontFamily: "var(--font-sans)" }}>
-              削除する
-            </button>
-            <button onClick={() => setDeleteTarget(null)}
-                    style={{ width: "100%", padding: "14px", borderRadius: 12,
-                             background: "transparent", color: "var(--color-text-mid)",
-                             border: "1px solid var(--color-border)",
-                             fontSize: 15, cursor: "pointer",
-                             fontFamily: "var(--font-sans)" }}>
-              キャンセル
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* ── 手動追加モーダル ── */}
       {showAddModal && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
                       display: "flex", alignItems: "flex-end", zIndex: 100 }}
-             onClick={() => setShowAddModal(false)}>
-          <div onClick={(e) => e.stopPropagation()}
+             onClick={closeAddModal}>
+          <div ref={modalContentRef}
+               onTouchStart={handleModalTouchStart}
+               onTouchEnd={handleModalTouchEnd}
+               onClick={(e) => e.stopPropagation()}
                style={{ width: "100%", background: "var(--color-bg)", borderRadius: "20px 20px 0 0",
-                        padding: "24px 20px 48px", display: "flex", flexDirection: "column", gap: 16,
+                        padding: "12px 20px 48px", display: "flex", flexDirection: "column", gap: 16,
                         maxHeight: "90dvh", overflowY: "auto", scrollbarWidth: "none" }}>
+            {/* ドラッグインジケーター */}
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 4 }}>
+              <div style={{ width: 36, height: 4, borderRadius: 2,
+                            background: "rgba(0,0,0,0.15)" }} />
+            </div>
             <h2 style={{ fontFamily: "var(--font-sans)", fontSize: 17, fontWeight: 500,
                          color: "var(--color-text-main)", textAlign: "center" }}>
               リストに追加
@@ -464,7 +466,7 @@ export const HomePage = () => {
                                    background: newCategory === cat ? "var(--color-text-main)" : "transparent",
                                    color: newCategory === cat ? "var(--color-bg)" : "#5C4A35",
                                    cursor: "pointer", fontFamily: "var(--font-sans)" }}>
-                    {CATEGORY_STYLE[cat]?.emoji} {cat}
+                    {CATEGORY_STYLE[cat]?.emoji} {CATEGORY_LABEL[cat] ?? cat}
                   </button>
                 ))}
               </div>
@@ -576,6 +578,7 @@ export const HomePage = () => {
           </div>
         </div>
       )}
+
     </div>
   );
 };
@@ -590,7 +593,7 @@ const ModalLabel = ({ children }: { children: React.ReactNode }) => (
 );
 
 const SectionLabel = ({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) => (
-  <p style={{ padding: "12px 20px 8px", fontSize: 12, letterSpacing: "0.08em",
+  <p style={{ padding: "6px 20px 8px", fontSize: 12, letterSpacing: "0.08em",
               color: "var(--color-text-mid)", fontFamily: "var(--font-sans)", fontWeight: 600,
               position: "sticky", top: 0, zIndex: 10,
               background: "var(--color-bg)", ...style }}>
@@ -660,14 +663,14 @@ const GuideDetailOverlay = ({ item }: { item: Item }) => {
   );
 };
 
-const GoCard = ({ item, onClick, onDone, onWant, onDelete }:
-  { item: Item; onClick: () => void; onDone: () => void; onWant: () => void; onDelete: () => void }) => {
-  const s = CATEGORY_STYLE[item.category] ?? CATEGORY_STYLE["その他"];
+const GoCard = ({ item, onClick }:
+  { item: Item; onClick: () => void }) => {
+  const s = CATEGORY_STYLE[item.category] ?? CATEGORY_STYLE["other"];
   const photo = heroUrl(item);
   return (
     // カード全体をボタンにしてタップ判定を全面に
     <button onClick={onClick}
-            style={{ flexShrink: 0, width: 120, height: 150, borderRadius: 12, overflow: "hidden",
+            style={{ flexShrink: 0, width: "calc(100vw - 40px)", height: "calc((100vw - 40px) * 0.618)", borderRadius: 12, overflow: "hidden",
                      position: "relative", border: "none", padding: 0, cursor: "pointer" }}>
       {/* 背景：写真 or グラデーション */}
       {photo ? (
@@ -689,61 +692,35 @@ const GoCard = ({ item, onClick, onDone, onWant, onDelete }:
       )}
       {/* 暗幕オーバーレイ */}
       <div style={{ position: "absolute", inset: 0,
-                    background: "linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, transparent 40%, rgba(0,0,0,0.7) 100%)",
+                    background: "linear-gradient(to bottom, rgba(0,0,0,0) 0%, transparent 60%, rgba(0,0,0,0.8) 80%)",
                     pointerEvents: "none" }} />
-      {/* ✓ 完了ボタン（右上） */}
-      <button onClick={(e) => { e.stopPropagation(); onDone(); }}
-              style={{ position: "absolute", top: 7, right: 7.5, zIndex: 3,
-                       width: 17, height: 17, borderRadius: "50%",
-                       background: "rgba(255,255,255,0.2)", border: "1.5px solid rgba(255,255,255,0.5)",
-                       display: "flex", alignItems: "center", justifyContent: "center",
-                       cursor: "pointer" }}>
-        <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
-          <path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-      </button>
-      {/* × 削除ボタン（左下） */}
-      <button onClick={(e) => { e.stopPropagation(); onDelete(); }}
-              style={{ position: "absolute", bottom: 9, left: 8, zIndex: 3,
-                       background: "transparent", border: "none",
-                       fontSize: 13, color: "rgba(255,255,255,0.55)", cursor: "pointer",
-                       lineHeight: 1, padding: 0 }}>
-        ×
-      </button>
       {/* タイトル・カテゴリ（下部） */}
       <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 2,
-                    padding: "8px 28px 9px 10px", textAlign: "left" }}>
-        <div style={{ fontSize: 9, letterSpacing: "0.08em",
-                      color: "rgba(255,255,255,0.7)", fontFamily: "var(--font-sans)",
-                      marginBottom: 3 }}>
-          {item.category}
+                    padding: "8px 10px 12px 10px", textAlign: "left" }}>
+        <div style={{ fontSize: 11, letterSpacing: "0.08em",
+                      color: "rgba(255, 255, 255, 0.7)", fontFamily: "var(--font-sans)",
+                      marginBottom: 3, textDecoration: "underline", textUnderlineOffset: "2px"}}>
+          {CATEGORY_LABEL[item.category] ?? item.category}
         </div>
-        <p style={{ fontSize: 10, fontWeight: 500, color: "#fff", lineHeight: 1.35,
-                    fontFamily: "var(--font-sans)", margin: 0,
+        <p style={{ fontSize: 14, fontWeight: 500, color: "#ffffffee", lineHeight: 1,
+                    fontFamily: "var(--font-sans)", margin: 0, paddingLeft: 6,
                     display: "-webkit-box", WebkitLineClamp: 1,
                     WebkitBoxOrient: "vertical", overflow: "hidden" }}>
           {item.title}
         </p>
       </div>
-      {/* ❤️ お気に入り（右下） */}
-      <button onClick={(e) => { e.stopPropagation(); onWant(); }}
-              style={{ position: "absolute", bottom: 11, right: 8, zIndex: 3,
-                       background: "transparent", border: "none",
-                       fontSize: 13, cursor: "pointer", lineHeight: 1 }}>
-        {item.isWant ? "❤️" : "🤍"}
-      </button>
     </button>
   );
 };
 
-const GoodCard = ({ item, onTap, onWant, onDone, onDelete }:
-  { item: Item; onTap: () => void; onWant: () => void; onDone: () => void; onDelete: () => void }) => {
-  const s = CATEGORY_STYLE[item.category] ?? CATEGORY_STYLE["その他"];
+const GoodCard = ({ item, onTap }:
+  { item: Item; onTap: () => void }) => {
+  const s = CATEGORY_STYLE[item.category] ?? CATEGORY_STYLE["other"];
   const photo = heroUrl(item);
   return (
     // カード全体をボタンにしてタップ判定を全面に
     <button onClick={onTap}
-            style={{ position: "relative", borderRadius: 12, overflow: "hidden", height: 130,
+            style={{ position: "relative", borderRadius: 12, overflow: "hidden", height: "calc((50vw - 25px) * 0.618)",
                      border: "none", padding: 0, cursor: "pointer", width: "100%" }}>
       {/* 背景：写真 or グラデーション */}
       {photo ? (
@@ -765,49 +742,23 @@ const GoodCard = ({ item, onTap, onWant, onDone, onDelete }:
       )}
       {/* 暗幕オーバーレイ */}
       <div style={{ position: "absolute", inset: 0,
-                    background: "linear-gradient(to bottom, rgba(0,0,0,0.05) 0%, transparent 40%, rgba(0,0,0,0.7) 100%)",
+                    background: "linear-gradient(to bottom, rgba(0,0,0,0) 0%, transparent 45%, rgba(0,0,0,0.8) 80%)",
                     pointerEvents: "none" }} />
-      {/* ✓ 完了ボタン（右上） */}
-      <button onClick={(e) => { e.stopPropagation(); onDone(); }}
-              style={{ position: "absolute", top: 7, right: 7.5, zIndex: 2,
-                       width: 17, height: 17, borderRadius: "50%",
-                       background: "rgba(255,255,255,0.2)", border: "1.5px solid rgba(255,255,255,0.5)",
-                       display: "flex", alignItems: "center", justifyContent: "center",
-                       cursor: "pointer" }}>
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-          <path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-      </button>
-      {/* × 削除ボタン（左下） */}
-      <button onClick={(e) => { e.stopPropagation(); onDelete(); }}
-              style={{ position: "absolute", bottom: 9, left: 8, zIndex: 3,
-                       background: "transparent", border: "none",
-                       fontSize: 13, color: "rgba(255,255,255,0.55)", cursor: "pointer",
-                       lineHeight: 1, padding: 0 }}>
-        ×
-      </button>
       {/* タイトル・カテゴリ（下部） */}
       <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 2,
-                    padding: "8px 28px 9px 10px", textAlign: "left" }}>
-        <div style={{ fontSize: 9, letterSpacing: "0.08em",
-                      color: "rgba(255,255,255,0.7)", fontFamily: "var(--font-sans)",
-                      marginBottom: 3 }}>
-          {item.category}
+                    padding: "8px 10px 9px 10px", textAlign: "left" }}>
+        <div style={{ fontSize: 10, letterSpacing: "0.08em",
+                      color: "rgba(255, 255, 255, 0.7)", fontFamily: "var(--font-sans)",
+                      marginBottom: 3, textDecoration: "underline", textUnderlineOffset: "2px" }}>
+          {CATEGORY_LABEL[item.category] ?? item.category}
         </div>
-        <p style={{ fontSize: 10, fontWeight: 500, color: "#fff", lineHeight: 1.35,
-                    fontFamily: "var(--font-sans)", margin: 0,
+        <p style={{ fontSize: 13, fontWeight: 500, color: "#ffffffee", lineHeight: 1,
+                    fontFamily: "var(--font-sans)", margin: 0, paddingLeft: 6,
                     display: "-webkit-box", WebkitLineClamp: 1,
                     WebkitBoxOrient: "vertical", overflow: "hidden" }}>
           {item.title}
         </p>
       </div>
-      {/* ❤️ お気に入り（右下） */}
-      <button onClick={(e) => { e.stopPropagation(); onWant(); }}
-              style={{ position: "absolute", bottom: 10, right: 8, zIndex: 3,
-                       background: "transparent", border: "none",
-                       fontSize: 13, cursor: "pointer", lineHeight: 1 }}>
-        {item.isWant ? "❤️" : "🤍"}
-      </button>
     </button>
   );
 };
@@ -821,25 +772,25 @@ const EmptyState = ({ onAskAI }: { onAskAI: () => void }) => (
     </p>
     <p style={{ fontSize: 13, color: "var(--color-text-mid)", marginBottom: 24, lineHeight: 1.6,
                 fontFamily: "var(--font-sans)" }}>
-      AIにもう一度、ふたりにぴったりの体験を提案してもらいましょう。
+      次の体験を探しに行きましょう！
     </p>
     <button onClick={onAskAI}
             style={{ padding: "12px 28px", background: "var(--color-primary)",
                      color: "#fff", border: "none", borderRadius: 24,
                      fontSize: 13, fontWeight: 500, letterSpacing: "0.04em",
                      fontFamily: "var(--font-sans)", cursor: "pointer" }}>
-      ✦ AIに再提案してもらう
+      ✦ おすすめ体験へ →
     </button>
   </div>
 );
 
 const DoneRow = ({ item, onTap }: { item: Item; onTap: () => void }) => {
-  const s = CATEGORY_STYLE[item.category] ?? CATEGORY_STYLE["その他"];
+  const s = CATEGORY_STYLE[item.category] ?? CATEGORY_STYLE["other"];
   return (
     <button onClick={onTap}
             style={{ width: "100%", display: "flex", alignItems: "center", gap: 12,
                      padding: "11px 0", borderBottom: "1px solid rgba(0,0,0,0.06)",
-                     background: "transparent", border: "none", cursor: "pointer", opacity: 0.55 }}>
+                     background: "transparent", border: "none", cursor: "pointer" }}>
       <div style={{ width: 46, height: 46, borderRadius: 10, flexShrink: 0,
                     overflow: "hidden", position: "relative",
                     background: s.bg, display: "flex", alignItems: "center",
@@ -852,14 +803,14 @@ const DoneRow = ({ item, onTap }: { item: Item; onTap: () => void }) => {
         )}
       </div>
       <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
-        <p style={{ fontSize: 12, fontWeight: 500, color: "var(--color-text-main)",
+        <p style={{ fontSize: 14, fontWeight: 500, color: "var(--color-text-main)",
                     whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                    textDecoration: "line-through", fontFamily: "var(--font-sans)" }}>
+                    fontFamily: "var(--font-sans)" }}>
           {item.title}
         </p>
-        <p style={{ fontSize: 10, color: "var(--color-text-mid)", marginTop: 2,
+        <p style={{ fontSize: 12, color: "var(--color-text-mid)", marginTop: 2,
                     fontFamily: "var(--font-sans)" }}>
-          {item.category}{item.rating != null && ` · ${"⭐".repeat(item.rating)}`}
+          {CATEGORY_LABEL[item.category] ?? item.category}{item.rating != null && ` · ${"⭐".repeat(item.rating) + "☆".repeat(5 - item.rating)}`}
         </p>
       </div>
     </button>

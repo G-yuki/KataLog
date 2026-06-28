@@ -100,23 +100,31 @@ ${areaNote}- 子ども：${childrenLabel[hearing.children] ?? hearing.children}
 ${hearing.freetext ? `- 自由入力（最優先で反映すること）：${hearing.freetext}` : ""}
 
 【カテゴリ定義】（必ずいずれか1つを選ぶこと）
-- おでかけ：観光・旅行・テーマパーク・温泉・自然・アウトドア・ドライブ・散歩・アート・美術館など外出を伴う体験全般
-- 食事：レストラン・カフェ・食べ歩き・料理体験・グルメイベントなど食に関する体験
-- 映画：映画館・映画鑑賞・ドラマ視聴など
-- 本：読書・書店めぐり・図書館・文学・マンガなど
-- ゲーム：ゲームセンター・ボードゲームカフェ・テレビゲーム・eスポーツなど
-- 音楽：ライブ・コンサート・カラオケ・楽器演奏・音楽フェスなど
-- スポーツ：スポーツ観戦・スポーツ体験・フィットネス・アウトドアスポーツなど
-- その他：上記のどれにも明確に当てはまらない体験のみ（極力使わないこと）
+- nature：公園・山・海・自然・アウトドア・ドライブ・散歩など自然・屋外体験
+- gourmet：レストラン・カフェ・食べ歩き・料理体験・グルメイベントなど食に関する体験
+- art：美術館・博物館・ギャラリー・文化施設・観光地・アート体験など文化体験
+- music：ライブ・コンサート・カラオケ・楽器演奏・音楽フェスなど
+- sports：スポーツ観戦・スポーツ体験・フィットネス・アウトドアスポーツなど
+- movie：映画館・映画鑑賞・ドラマ視聴など
+- book：読書・書店めぐり・図書館・文学・マンガなど
+- game：ゲームセンター・ボードゲームカフェ・テレビゲーム・eスポーツなど
+- theme：テーマパーク・遊園地・水族館・動物園など
+- onsen：温泉・スパ・サウナ・銭湯・リラクゼーションなど
+- other：上記のどれにも明確に当てはまらない体験のみ（極力使わないこと）
 
 【ルール】
 - title はGoogleマップで検索しやすい具体的な店名・スポット名・施設名・体験名で15文字以内（例：「箱根登山鉄道で紅葉狩り」「新宿御苑でお花見」「浅草の老舗天ぷらでランチ」）
 - 固有名詞を含む具体的なタイトルを優先すること（「カフェに行く」より「猿田彦珈琲でモーニング」）
-- category は上記8種類のいずれか。「その他」は上記7カテゴリのどれにも当てはまらない場合のみ使うこと
-- 50件のうち「その他」は最大3件まで。違反した場合は超過分を適切なカテゴリに変更してから出力すること
+- category は上記11種類のいずれか。「other」は上記10カテゴリのどれにも当てはまらない場合のみ使うこと
+- 50件のうち「other」は最大3件まで。違反した場合は超過分を適切なカテゴリに変更してから出力すること
 - 件数が50件に満たない場合は追加して必ず50件にすること
 - type: outdoor=外出・移動が必要、indoor=自宅・室内で完結
 - difficulty: easy=気軽にできる、special=少し特別・準備が必要
+- budgetLevel: 1人あたりの目安費用（1=〜¥3,000 / 2=〜¥5,000 / 3=〜¥10,000 / 4=〜¥30,000）
+- kidsFriendly: true=子連れ・ファミリー向け / false=大人向け・子ども不向き
+- access: transit=電車・バス等の公共交通でアクセス可 / car=車が必要 / both=どちらでもOK
+- weatherSensitive: true=天気（雨・暑さ等）に大きく左右される / false=天候を問わず楽しめる
+- seasonBest: 最も楽しめる季節（複数可、通年楽しめる場合は空配列）
 - 50件すべて異なる体験にすること
 - ヒアリングの好みを反映した具体的なタイトルにすること${
   existingTitles.length > 0
@@ -129,19 +137,24 @@ ${hearing.freetext ? `- 自由入力（最優先で反映すること）：${hea
     items: {
       type: SchemaType.OBJECT,
       properties: {
-        title:      { type: SchemaType.STRING },
-        category:   { type: SchemaType.STRING, format: "enum", enum: ["おでかけ","食事","映画","本","ゲーム","音楽","スポーツ","その他"] },
-        type:       { type: SchemaType.STRING, format: "enum", enum: ["outdoor","indoor"] },
-        difficulty: { type: SchemaType.STRING, format: "enum", enum: ["easy","special"] },
+        title:            { type: SchemaType.STRING },
+        category:         { type: SchemaType.STRING, format: "enum", enum: ["nature","gourmet","art","music","sports","movie","book","game","theme","onsen","other"] },
+        type:             { type: SchemaType.STRING, format: "enum", enum: ["outdoor","indoor"] },
+        difficulty:       { type: SchemaType.STRING, format: "enum", enum: ["easy","special"] },
+        budgetLevel:      { type: SchemaType.INTEGER },
+        kidsFriendly:     { type: SchemaType.BOOLEAN },
+        access:           { type: SchemaType.STRING, format: "enum", enum: ["transit","car","both"] },
+        weatherSensitive: { type: SchemaType.BOOLEAN },
+        seasonBest:       { type: SchemaType.ARRAY, items: { type: SchemaType.STRING, format: "enum", enum: ["spring","summer","autumn","winter"] } },
       },
-      required: ["title","category","type","difficulty"],
+      required: ["title","category","type","difficulty","budgetLevel","kidsFriendly","access","weatherSensitive","seasonBest"],
     },
   };
 
   try {
     const genAI = new GoogleGenerativeAI(geminiApiKey.value());
     const model = genAI.getGenerativeModel({
-      model: "gemini-3.1-flash-lite-preview",
+      model: "gemini-2.5-flash-lite",
       generationConfig: {
         responseMimeType: "application/json",
         responseSchema,
@@ -240,7 +253,7 @@ ${todoList}
 
     try {
       const genAI = new GoogleGenerativeAI(geminiApiKey.value());
-      const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
+      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
       const result = await model.generateContent(prompt);
       return { memory: result.response.text().trim() };
     } catch (error) {
@@ -297,14 +310,15 @@ export const enrichItem = onCall(
 
     // Step 1: Text Search（Essentials tier）
     // 失敗時は place=null のまま続行 → Firestore に placeId="" を確定書き込みして再呼び出しを防ぐ
-    let place: { id: string; location?: { latitude: number; longitude: number } } | null = null;
+    type PlaceResult = { id: string; location?: { latitude: number; longitude: number }; types?: string[] };
+    let place: PlaceResult | null = null;
     try {
       const searchRes = await fetch("https://places.googleapis.com/v1/places:searchText", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "X-Goog-Api-Key": mapsServerKey.value(),
-          "X-Goog-FieldMask": "places.id,places.location",
+          "X-Goog-FieldMask": "places.id,places.location,places.types",
         },
         body: JSON.stringify({
           textQuery,
@@ -313,9 +327,7 @@ export const enrichItem = onCall(
           pageSize: 5,
         }),
       });
-      const searchData = await searchRes.json() as {
-        places?: Array<{ id: string; location?: { latitude: number; longitude: number } }>;
-      };
+      const searchData = await searchRes.json() as { places?: PlaceResult[] };
       place = searchData.places?.[0] ?? null;
     } catch (e) {
       // ネットワークエラー・JSONパースエラー（非JSON応答）等
@@ -377,12 +389,12 @@ export const enrichItem = onCall(
         placePhotoRef,
         lat:          place?.location?.latitude ?? null,
         lng:          place?.location?.longitude ?? null,
+        placeTypes:   place?.types ?? null,
       });
 
     return { ok: true };
   }
 );
-
 
 // ── アイテム削除トリガー（TTL 削除時に Storage 写真を削除） ────────────
 export const onItemDeleted = onDocumentDeleted(
