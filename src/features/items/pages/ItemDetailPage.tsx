@@ -8,13 +8,11 @@ import { Loading } from "../../../components/Loading";
 import { usePair } from "../../../contexts/PairContext";
 import { db } from "../../../firebase/firestore";
 import { doc, getDoc } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
-import { storage } from "../../../firebase/storage";
 import type { Item } from "../../../types";
 import { PLACE_CATEGORIES, CATEGORY_LABEL } from "../../../lib/constants";
-const MAX_PHOTOS = 20;
-const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
-const ALLOWED_EXT  = new Set(["jpg", "jpeg", "png", "gif", "webp"]);
+import { usePhotoUpload, MAX_PHOTOS } from "../hooks/usePhotoUpload";
+import { HeaderAdjustOverlay } from "../components/HeaderAdjustOverlay";
+import { PhotoViewer } from "../components/PhotoViewer";
 
 // placeId があれば特定スポットを開く。なければタイトル検索（地名なし → 現在地周辺になる）
 const mapsUrl = (item: Pick<Item, "userPlaceUrl" | "placeId" | "title">) => {
@@ -45,20 +43,11 @@ export const ItemDetailPage = () => {
   const [completedAtDate, setCompletedAtDate] = useState("");
   const [completedAtHour, setCompletedAtHour] = useState(12);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [photoUploading, setPhotoUploading] = useState(false);
-  const [photoError, setPhotoError] = useState<string | null>(null);
-  const [photosExpanded, setPhotosExpanded] = useState(false);
-  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
-  const [showPhotoDeleteConfirm, setShowPhotoDeleteConfirm] = useState(false);
-  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [headerPosY, setHeaderPosY] = useState(50);
   const [showHeaderAdjust, setShowHeaderAdjust] = useState(false);
-  const [adjPosY, setAdjPosY] = useState(50);
-  const [photoNaturalSize, setPhotoNaturalSize] = useState<{ w: number; h: number } | null>(null);
-  const adjustOverlayRef = useRef<HTMLDivElement>(null);
-  const adjPosYRef = useRef(50);
-  const photoExcessRef = useRef(0);
   const enrichCalled = useRef(false);
+
+  const photo = usePhotoUpload(pairId, item, saveDetail);
 
   useEffect(() => {
     if (!pairLoading && !pairId) navigate("/", { replace: true });
@@ -79,8 +68,6 @@ export const ItemDetailPage = () => {
     return null;
   }, [item?.pinnedPhotoUrl, item?.placePhotoRef, userPhotosList.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { adjPosYRef.current = adjPosY; }, [adjPosY]);
-
   useEffect(() => {
     if (!item) return;
     // memoChanged=true（編集中）のときは Firestore 更新でユーザー入力を上書きしない
@@ -88,35 +75,6 @@ export const ItemDetailPage = () => {
     setRating(item.rating ?? null);
     setHeaderPosY(item.headerPosY ?? 50);
   }, [item]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (!showHeaderAdjust) return;
-    const el = adjustOverlayRef.current;
-    if (!el) return;
-    const drag = { startY: 0, startPos: 0, active: false };
-    const onStart = (e: TouchEvent) => {
-      drag.startY = e.touches[0].clientY;
-      drag.startPos = adjPosYRef.current;
-      drag.active = true;
-    };
-    const onMove = (e: TouchEvent) => {
-      if (!drag.active) return;
-      e.preventDefault();
-      const excess = photoExcessRef.current;
-      if (excess <= 0) return;
-      const delta = e.touches[0].clientY - drag.startY;
-      setAdjPosY(Math.max(0, Math.min(100, drag.startPos - delta * 100 / excess)));
-    };
-    const onEnd = () => { drag.active = false; };
-    el.addEventListener("touchstart", onStart);
-    el.addEventListener("touchmove", onMove, { passive: false });
-    el.addEventListener("touchend", onEnd);
-    return () => {
-      el.removeEventListener("touchstart", onStart);
-      el.removeEventListener("touchmove", onMove);
-      el.removeEventListener("touchend", onEnd);
-    };
-  }, [showHeaderAdjust]);
 
   // Places エンリッチ: placeId===null（未検索）のときだけ呼ぶ
   // placeId===""  → 検索済み・場所なし or Step1失敗で確定済み → スキップ
@@ -211,121 +169,17 @@ export const ItemDetailPage = () => {
     setEditingCompletedAt(false);
   };
 
-  const handleAdjustSave = async () => {
+  const handleAdjustSave = async (newPosY: number) => {
     if (!item) return;
-    setHeaderPosY(adjPosY);
+    setHeaderPosY(newPosY);
     setShowHeaderAdjust(false);
-    await saveDetail(item.itemId, { headerPosY: adjPosY });
+    await saveDetail(item.itemId, { headerPosY: newPosY });
   };
 
   const handleDelete = async () => {
     if (!item) return;
     await removeItem(item.itemId);
     navigate(backTo, { replace: true });
-  };
-
-  const validateImageFile = (file: File): Promise<void> =>
-    new Promise((resolve, reject) => {
-      if (!ALLOWED_MIME.has(file.type)) { reject(new Error("unsupported_type")); return; }
-      const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
-      if (!ALLOWED_EXT.has(ext)) { reject(new Error("unsupported_type")); return; }
-      // 実際に画像として読み込めるか確認（.exe偽装対策）
-      const img = new Image();
-      const objUrl = URL.createObjectURL(file);
-      img.onload = () => { URL.revokeObjectURL(objUrl); resolve(); };
-      img.onerror = () => {
-        URL.revokeObjectURL(objUrl);
-        // HEICなど非対応フォーマットはSafari案内
-        const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent);
-        const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-        reject(new Error(isIOS && !isSafari ? "use_safari" : "not_image"));
-      };
-      img.src = objUrl;
-    });
-
-  const resizeImage = (source: File | Blob, maxPx: number): Promise<Blob> =>
-    new Promise((resolve, reject) => {
-      const img = new Image();
-      const objUrl = URL.createObjectURL(source);
-      img.onload = () => {
-        URL.revokeObjectURL(objUrl);
-        // Canvas経由でリサイズするとEXIF（位置情報等）は自動除去される
-        const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.round(img.width * scale);
-        canvas.height = Math.round(img.height * scale);
-        canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
-        canvas.toBlob(
-          (blob) => (blob ? resolve(blob) : reject(new Error("resize failed"))),
-          "image/jpeg",
-          0.8
-        );
-      };
-      img.onerror = () => { URL.revokeObjectURL(objUrl); reject(new Error("load failed")); };
-      img.src = objUrl;
-    });
-
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file || !pairId || !item) return;
-    if ((item.userPhotos ?? []).length >= MAX_PHOTOS) {
-      setPhotoError(`写真は最大${MAX_PHOTOS}枚までです`);
-      return;
-    }
-    setPhotoError(null);
-    setPhotoUploading(true);
-    try {
-      await validateImageFile(file);
-      const blob = await resizeImage(file, 1200);
-      const uuid = crypto.randomUUID();
-      const storageRef = ref(storage, `pairs/${pairId}/items/${item.itemId}/${uuid}.jpg`);
-      await uploadBytes(storageRef, blob, {
-        contentType: "image/jpeg",
-        cacheControl: "public, max-age=31536000",
-      });
-      const url = await getDownloadURL(storageRef);
-      await saveDetail(item.itemId, { userPhotos: [...(item.userPhotos ?? []), url] });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "";
-      if (msg === "use_safari") {
-        setPhotoError("この写真形式はSafariでのみ対応しています。Safariで開いて再度お試しください。");
-      } else if (msg === "unsupported_type" || msg === "not_image") {
-        setPhotoError("対応していないファイルです。JPEG・PNG・WebP形式の写真を選択してください。");
-      }
-    } finally {
-      setPhotoUploading(false);
-    }
-  };
-
-  const handlePhotoDelete = async (url: string) => {
-    if (!pairId || !item) return;
-    const match = url.match(/\/o\/([^?]+)/);
-    if (match) {
-      try { await deleteObject(ref(storage, decodeURIComponent(match[1]))); }
-      catch { /* 既に削除済みの場合も無視 */ }
-    }
-    const updates: Parameters<typeof saveDetail>[1] = {
-      userPhotos: (item.userPhotos ?? []).filter((u) => u !== url),
-    };
-    if (item.pinnedPhotoUrl === url) updates.pinnedPhotoUrl = null;
-    await saveDetail(item.itemId, updates);
-    setViewerIndex(null);
-  };
-
-  const handleBulkPhotoDelete = async () => {
-    if (!pairId || !item) return;
-    await Promise.all(
-      (item.userPhotos ?? []).map(async (url) => {
-        const match = url.match(/\/o\/([^?]+)/);
-        if (!match) return;
-        try { await deleteObject(ref(storage, decodeURIComponent(match[1]))); }
-        catch { /* ignore */ }
-      })
-    );
-    await saveDetail(item.itemId, { userPhotos: [], pinnedPhotoUrl: null });
-    setShowBulkDeleteConfirm(false);
-    setPhotosExpanded(false);
   };
 
   if (loading || !pairId) return <Loading />;
@@ -351,7 +205,7 @@ export const ItemDetailPage = () => {
           <img
             src={headerPhotoUrl!}
             alt={item.title}
-            onClick={() => { setAdjPosY(headerPosY); setShowHeaderAdjust(true); }}
+            onClick={() => setShowHeaderAdjust(true)}
             style={{ width: "100%", height: "100%", objectFit: "cover",
                      objectPosition: `center ${headerPosY}%`,
                      display: "block", cursor: "pointer", userSelect: "none" }}
@@ -675,7 +529,7 @@ export const ItemDetailPage = () => {
         {(() => {
           const photos = item.userPhotos ?? [];
           const canAdd = photos.length < MAX_PHOTOS;
-          const displayed = photosExpanded ? photos : photos.slice(0, 3);
+          const displayed = photo.photosExpanded ? photos : photos.slice(0, 3);
           return (
             <div className="card p-4 mb-4">
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
@@ -683,25 +537,25 @@ export const ItemDetailPage = () => {
                   写真{photos.length > 0 && <span style={{ fontWeight: 400, fontSize: 11, color: "var(--color-text-soft)", marginLeft: 6 }}>{photos.length}/{MAX_PHOTOS}</span>}
                 </p>
                 {canAdd && (
-                  <label style={{ cursor: photoUploading ? "default" : "pointer" }}>
+                  <label style={{ cursor: photo.photoUploading ? "default" : "pointer" }}>
                     <input type="file" accept="image/jpeg,image/png,image/gif,image/webp"
                            style={{ display: "none" }}
-                           onChange={handlePhotoUpload} disabled={photoUploading} />
+                           onChange={photo.handlePhotoUpload} disabled={photo.photoUploading} />
                     <span style={{ fontSize: 12, fontWeight: 600,
-                                   color: photoUploading ? "var(--color-text-soft)" : "var(--color-primary)" }}>
-                      {photoUploading ? "アップロード中..." : "+ 追加"}
+                                   color: photo.photoUploading ? "var(--color-text-soft)" : "var(--color-primary)" }}>
+                      {photo.photoUploading ? "アップロード中..." : "+ 追加"}
                     </span>
                   </label>
                 )}
               </div>
 
-              {photos.length === 0 && !photoUploading ? (
+              {photos.length === 0 && !photo.photoUploading ? (
                 <label style={{ cursor: "pointer", display: "flex", flexDirection: "column",
                                 alignItems: "center", justifyContent: "center", padding: "20px 0",
                                 border: "1.5px dashed var(--color-border)", borderRadius: 10, gap: 6 }}>
                   <input type="file" accept="image/jpeg,image/png,image/gif,image/webp"
                          style={{ display: "none" }}
-                         onChange={handlePhotoUpload} disabled={photoUploading} />
+                         onChange={photo.handlePhotoUpload} disabled={photo.photoUploading} />
                   <span style={{ fontSize: 22 }}>📷</span>
                   <span style={{ fontSize: 12, color: "var(--color-text-soft)" }}>写真を追加する</span>
                 </label>
@@ -709,33 +563,33 @@ export const ItemDetailPage = () => {
                 <>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
                     {displayed.map((url, idx) => (
-                      <button key={url} onClick={() => setViewerIndex(idx)}
+                      <button key={url} onClick={() => photo.setViewerIndex(idx)}
                               style={{ position: "relative", aspectRatio: "1", borderRadius: 8,
                                        overflow: "hidden", border: "none", padding: 0, cursor: "pointer" }}>
                         <img src={url} alt="" loading="lazy"
                              style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                       </button>
                     ))}
-                    {photoUploading && (
+                    {photo.photoUploading && (
                       <div style={{ aspectRatio: "1", borderRadius: 8, background: "rgba(0,0,0,0.06)",
                                     display: "flex", alignItems: "center", justifyContent: "center" }}>
                         <span style={{ fontSize: 20 }}>⏳</span>
                       </div>
                     )}
                   </div>
-                  {!photosExpanded && photos.length > 3 && (
-                    <button onClick={() => setPhotosExpanded(true)}
+                  {!photo.photosExpanded && photos.length > 3 && (
+                    <button onClick={() => photo.setPhotosExpanded(true)}
                             style={{ width: "100%", marginTop: 8, padding: "8px 0", fontSize: 12,
                                      color: "var(--color-text-mid)", background: "none",
                                      border: "1px solid var(--color-border)", borderRadius: 8, cursor: "pointer" }}>
                       残り{photos.length - 3}枚を見る &gt;
                     </button>
                   )}
-                  {photoError && (
-                    <p style={{ fontSize: 11, color: "#E53E3E", marginTop: 6 }}>{photoError}</p>
+                  {photo.photoError && (
+                    <p style={{ fontSize: 11, color: "#E53E3E", marginTop: 6 }}>{photo.photoError}</p>
                   )}
                   {photos.length > 0 && (
-                    <button onClick={() => setShowBulkDeleteConfirm(true)}
+                    <button onClick={() => photo.setShowBulkDeleteConfirm(true)}
                             style={{ width: "100%", marginTop: 8, fontSize: 11,
                                      color: "var(--color-text-soft)", background: "none",
                                      border: "none", cursor: "pointer", textAlign: "right" }}>
@@ -762,171 +616,32 @@ export const ItemDetailPage = () => {
       </div>{/* /スクロールエリア */}
 
       {/* フォトビューアー */}
-      {viewerIndex !== null && (() => {
-        const photos = item.userPhotos ?? [];
-        const url = photos[viewerIndex];
-        if (!url) return null;
-        return (
-          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)",
-                        display: "flex", flexDirection: "column", zIndex: 200 }}>
-            {/* ヘッダー */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
-                          padding: "16px 20px", flexShrink: 0 }}>
-              <button onClick={() => { setViewerIndex(null); setShowPhotoDeleteConfirm(false); }}
-                      style={{ background: "none", border: "none", color: "#fff",
-                               fontSize: 14, cursor: "pointer", padding: "4px 8px 4px 0" }}>
-                ✕ 閉じる
-              </button>
-              <span style={{ fontSize: 13, color: "rgba(255,255,255,0.6)" }}>
-                {viewerIndex + 1} / {photos.length}
-              </span>
-            </div>
+      {photo.viewerIndex !== null && (
+        <PhotoViewer
+          photos={item.userPhotos ?? []}
+          initialIndex={photo.viewerIndex}
+          pinnedPhotoUrl={item.pinnedPhotoUrl}
+          onClose={() => photo.setViewerIndex(null)}
+          onDelete={photo.handlePhotoDelete}
+          onPin={(url) => saveDetail(item.itemId, { pinnedPhotoUrl: url })}
+        />
+      )}
 
-            {/* 写真 */}
-            <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
-                          padding: "0 16px" }}>
-              <img src={url} alt="" loading="lazy"
-                   style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 8 }} />
-            </div>
-
-            {/* ヘッダー固定ボタン */}
-            <div style={{ flexShrink: 0, textAlign: "center", paddingBottom: 4 }}>
-              <button
-                onClick={async () => {
-                  const newPinned = item.pinnedPhotoUrl === url ? null : url;
-                  await saveDetail(item.itemId, { pinnedPhotoUrl: newPinned });
-                }}
-                style={{ background: "none",
-                         border: `1px solid ${item.pinnedPhotoUrl === url ? "rgba(255,215,0,0.7)" : "rgba(255,255,255,0.3)"}`,
-                         borderRadius: 8, padding: "8px 20px", fontSize: 13, cursor: "pointer",
-                         color: item.pinnedPhotoUrl === url ? "#FFD700" : "rgba(255,255,255,0.7)" }}>
-                {item.pinnedPhotoUrl === url ? "📌 ヘッダーから解除" : "📌 ヘッダーに固定"}
-              </button>
-            </div>
-
-            {/* ナビゲーション＋削除 */}
-            {showPhotoDeleteConfirm ? (
-              <div style={{ flexShrink: 0, padding: "16px 20px 48px",
-                            display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
-                <p style={{ fontSize: 14, color: "#fff", marginBottom: 4 }}>この写真を削除しますか？</p>
-                <div style={{ display: "flex", gap: 12, width: "100%" }}>
-                  <button onClick={() => setShowPhotoDeleteConfirm(false)}
-                          style={{ flex: 1, padding: "12px 0", borderRadius: 10,
-                                   background: "rgba(255,255,255,0.15)", border: "none",
-                                   color: "#fff", fontSize: 14, cursor: "pointer" }}>
-                    キャンセル
-                  </button>
-                  <button onClick={() => { setShowPhotoDeleteConfirm(false); handlePhotoDelete(url); }}
-                          style={{ flex: 1, padding: "12px 0", borderRadius: 10,
-                                   background: "#E53E3E", border: "none",
-                                   color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
-                    削除する
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div style={{ flexShrink: 0, padding: "16px 20px 48px",
-                            display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-                <button onClick={() => { setViewerIndex(Math.max(0, viewerIndex - 1)); setShowPhotoDeleteConfirm(false); }}
-                        disabled={viewerIndex === 0}
-                        style={{ background: "rgba(255,255,255,0.15)", border: "none", borderRadius: 8,
-                                 color: "#fff", padding: "10px 20px", fontSize: 14, cursor: "pointer",
-                                 opacity: viewerIndex === 0 ? 0.3 : 1 }}>
-                  ‹ 前
-                </button>
-                <button onClick={() => setShowPhotoDeleteConfirm(true)}
-                        style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,100,100,0.6)",
-                                 borderRadius: 8, color: "#ff8080", padding: "10px 20px",
-                                 fontSize: 13, cursor: "pointer" }}>
-                  この写真を削除
-                </button>
-                <button onClick={() => { setViewerIndex(Math.min(photos.length - 1, viewerIndex + 1)); setShowPhotoDeleteConfirm(false); }}
-                        disabled={viewerIndex === photos.length - 1}
-                        style={{ background: "rgba(255,255,255,0.15)", border: "none", borderRadius: 8,
-                                 color: "#fff", padding: "10px 20px", fontSize: 14, cursor: "pointer",
-                                 opacity: viewerIndex === photos.length - 1 ? 0.3 : 1 }}>
-                  次 ›
-                </button>
-              </div>
-            )}
-          </div>
-        );
-      })()}
-
-      {/* ── ヘッダー写真位置調整ポップアップ ── */}
-      {showHeaderAdjust && (() => {
-        const screenW = window.innerWidth;
-        const screenH = window.innerHeight;
-        const frameTop = Math.floor((screenH - 220) / 2); // 選択枠を画面中央に固定
-        const displayedH = photoNaturalSize
-          ? screenW * photoNaturalSize.h / photoNaturalSize.w
-          : 0;
-        const photoExcess = Math.max(0, displayedH - 220);
-        photoExcessRef.current = photoExcess;
-        // 写真の top: 選択枠の上端に adjPosY% の位置が来るよう上下シフト
-        const photoTop = frameTop - (adjPosY / 100) * photoExcess;
-
-        return (
-          <div ref={adjustOverlayRef}
-               style={{ position: "fixed", inset: 0, zIndex: 300, overflow: "hidden" }}>
-            {/* 写真：自然縦幅・中央枠に対して上下シフト */}
-            <img
-              src={headerPhotoUrl!}
-              alt=""
-              onLoad={(e) => {
-                const img = e.currentTarget;
-                setPhotoNaturalSize({ w: img.naturalWidth, h: img.naturalHeight });
-              }}
-              style={{ position: "absolute", top: photoTop, left: 0,
-                       width: "100%", height: "auto", display: "block",
-                       pointerEvents: "none", userSelect: "none" }}
-            />
-            {/* 上部暗いオーバーレイ（選択枠より上） */}
-            <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: frameTop,
-                          background: "rgba(0,0,0,0.58)", pointerEvents: "none" }} />
-            {/* 選択枠：中央・白枠のみ・中は透明 */}
-            <div style={{ position: "absolute", top: frameTop, left: 0, right: 0, height: 220,
-                          border: "2px solid rgba(255,255,255,0.8)", boxSizing: "border-box",
-                          pointerEvents: "none" }} />
-            {/* 下部暗いオーバーレイ（選択枠より下） */}
-            <div style={{ position: "absolute", top: frameTop + 220, left: 0, right: 0, bottom: 0,
-                          background: "rgba(0,0,0,0.58)", pointerEvents: "none" }} />
-            {/* 操作説明（選択枠の下） */}
-            <div style={{ position: "absolute", top: frameTop + 228, left: 0, right: 0,
-                          textAlign: "center", pointerEvents: "none" }}>
-              <span style={{ fontSize: 13, color: "rgba(255,255,255,0.85)",
-                             textShadow: "0 1px 4px rgba(0,0,0,0.7)" }}>
-                ↕ 上下にドラッグして位置を調整
-              </span>
-            </div>
-            {/* ボタン行 */}
-            <div style={{ position: "absolute", bottom: 48, left: 0, right: 0,
-                          display: "flex", gap: 12, padding: "0 24px" }}>
-              <button
-                onClick={() => setShowHeaderAdjust(false)}
-                style={{ flex: 1, padding: "14px 0", borderRadius: 12,
-                         background: "rgba(255,255,255,0.18)", border: "1px solid rgba(255,255,255,0.35)",
-                         color: "#fff", fontSize: 15, cursor: "pointer", fontFamily: "var(--font-sans)" }}>
-                キャンセル
-              </button>
-              <button
-                onClick={handleAdjustSave}
-                style={{ flex: 1, padding: "14px 0", borderRadius: 12,
-                         background: "rgba(255,255,255,0.92)", border: "none",
-                         color: "#222", fontSize: 15, fontWeight: 700,
-                         cursor: "pointer", fontFamily: "var(--font-sans)" }}>
-                完了
-              </button>
-            </div>
-          </div>
-        );
-      })()}
+      {/* ヘッダー写真位置調整オーバーレイ */}
+      {showHeaderAdjust && headerPhotoUrl && (
+        <HeaderAdjustOverlay
+          photoUrl={headerPhotoUrl}
+          initialPosY={headerPosY}
+          onSave={handleAdjustSave}
+          onClose={() => setShowHeaderAdjust(false)}
+        />
+      )}
 
       {/* 写真一括削除確認 */}
-      {showBulkDeleteConfirm && (
+      {photo.showBulkDeleteConfirm && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)",
                       display: "flex", alignItems: "flex-end", zIndex: 150 }}
-             onClick={() => setShowBulkDeleteConfirm(false)}>
+             onClick={() => photo.setShowBulkDeleteConfirm(false)}>
           <div onClick={(e) => e.stopPropagation()}
                style={{ width: "100%", background: "var(--color-bg)",
                         borderRadius: "20px 20px 0 0", padding: "28px 20px 48px",
@@ -938,13 +653,13 @@ export const ItemDetailPage = () => {
             <p style={{ fontSize: 12, color: "var(--color-text-soft)", textAlign: "center", marginBottom: 8 }}>
               {item.userPhotos?.length ?? 0}枚の写真が削除されます
             </p>
-            <button onClick={handleBulkPhotoDelete}
+            <button onClick={photo.handleBulkPhotoDelete}
                     style={{ width: "100%", padding: "14px", borderRadius: 12,
                              background: "#E53E3E", color: "#fff", border: "none",
                              fontSize: 15, fontWeight: 600, cursor: "pointer" }}>
               削除する
             </button>
-            <button onClick={() => setShowBulkDeleteConfirm(false)}
+            <button onClick={() => photo.setShowBulkDeleteConfirm(false)}
                     style={{ width: "100%", padding: "14px", borderRadius: 12,
                              background: "transparent", color: "var(--color-text-mid)",
                              border: "1px solid var(--color-border)", fontSize: 15, cursor: "pointer" }}>
