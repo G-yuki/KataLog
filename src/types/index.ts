@@ -11,15 +11,15 @@ export interface User {
 
 // ── ペア ──────────────────────────────────────
 export interface Hearing {
-  genres: string[];        // 好きな体験タイプ
-  prefecture: string;      // 都道府県
-  range: string;           // "county" | "neighbor" | "anywhere"
-  children: string;        // "none" | "infant" | "child" | "planned"
-  transport: string;       // "transit" | "car" | "both"
-  budget: string;          // "3000" | "5000" | "10000" | "30000" | "any"
-  indoor: string;          // "outdoor" | "indoor" | "both"
+  genres: string[];
+  prefecture: string;
+  range: "county" | "neighbor" | "anywhere";
+  children: "none" | "infant" | "child" | "planned";
+  transport: "transit" | "car" | "both";
+  budget: "3000" | "5000" | "10000" | "30000" | "any";
+  indoor: "outdoor" | "indoor" | "both";
   freetext: string;
-  overseas?: string;       // 海外旅行エリア（Asia/Europe 等）- SUGGEST海外オプション用
+  overseas?: string;
 }
 
 export interface Pair {

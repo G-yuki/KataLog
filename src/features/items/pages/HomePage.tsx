@@ -1,5 +1,5 @@
 // src/features/items/pages/HomePage.tsx
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useItems } from "../hooks/useItems";
 import { Loading } from "../../../components/Loading";
@@ -11,17 +11,11 @@ import { CATEGORY_STYLE, CATEGORY_LABEL, CATEGORIES } from "../../../lib/constan
 import { BottomNav } from "../../../components/BottomNav";
 import { HomeGuide } from "../../setup/components/HomeGuide";
 import { addManualItem } from "../services/itemService";
-import type { Item, Category, ItemType, ItemStatus } from "../../../types";
-
-type Filter = "all" | Category;
-
-// ヘッダー写真の優先順: pinnedPhotoUrl → userPhotos[0] → placePhotoRef(Storage URLのみ)
-const heroUrl = (item: Item): string | null => {
-  if (item.pinnedPhotoUrl) return item.pinnedPhotoUrl;
-  if (item.userPhotos?.length) return item.userPhotos[0];
-  if (item.placePhotoRef?.startsWith("https://")) return item.placePhotoRef;
-  return null;
-};
+import { useWeather } from "../../../hooks/useWeather";
+import { scoreItem } from "../../../lib/scoring";
+import type { ScoreBreakdown } from "../../../lib/scoring";
+import { heroUrl } from "../../../lib/item";
+import type { Item, Category, ItemType, ItemStatus, Hearing } from "../../../types";
 
 export const HomePage = () => {
   const navigate = useNavigate();
@@ -29,7 +23,11 @@ export const HomePage = () => {
   const [pairNames, setPairNames] = useState("");
   const { items, loading } = useItems(pairId);
 
-  const [filter, setFilter] = useState<Filter>("all");
+  const [selectedCategories, setSelectedCategories] = useState<Category[]>([]);
+  const [sortOrder, setSortOrder] = useState<"score" | "createdAt">("createdAt");
+  const [catOpen, setCatOpen] = useState(false);
+  const [hearing, setHearing] = useState<Hearing | null>(null);
+  const [breakdownItem, setBreakdownItem] = useState<{ item: Item; bd: ScoreBreakdown } | null>(null);
   const [search, setSearch] = useState("");
   const [doneOpen, setDoneOpen] = useState(false);
   const [showGuide, setShowGuide] = useState(() => !localStorage.getItem("homeGuideSeen"));
@@ -52,10 +50,11 @@ export const HomePage = () => {
     try {
       const saved = sessionStorage.getItem(`home_state_${pairId}`);
       if (!saved) return;
-      const { filter: f, doneOpen: d, scrollTop: s } = JSON.parse(saved) as {
-        filter: Filter; doneOpen: boolean; scrollTop: number;
+      const { selectedCategories: cats, sortOrder: sort, doneOpen: d, scrollTop: s } = JSON.parse(saved) as {
+        selectedCategories: Category[]; sortOrder: "score" | "createdAt"; doneOpen: boolean; scrollTop: number;
       };
-      setFilter(f);
+      if (cats) setSelectedCategories(cats);
+      if (sort) setSortOrder(sort);
       setDoneOpen(d);
       requestAnimationFrame(() => {
         if (scrollRef.current) scrollRef.current.scrollTop = s ?? 0;
@@ -67,7 +66,7 @@ export const HomePage = () => {
     if (pairId) {
       try {
         sessionStorage.setItem(`home_state_${pairId}`, JSON.stringify({
-          filter, doneOpen,
+          selectedCategories, sortOrder, doneOpen,
           scrollTop: scrollRef.current?.scrollTop ?? 0,
         }));
       } catch { /* ignore */ }
@@ -154,7 +153,9 @@ export const HomePage = () => {
     (async () => {
       const pairSnap = await getDoc(doc(db, "pairs", pairId));
       if (!pairSnap.exists()) return;
-      const members = pairSnap.data().members as string[];
+      const data = pairSnap.data();
+      const members = data.members as string[];
+      if (data.hearing) setHearing(data.hearing as Hearing);
       const names = await Promise.all(members.map((uid) => getDisplayName(uid)));
       const validNames = names.filter(Boolean) as string[];
       if (validNames.length > 0) {
@@ -163,17 +164,30 @@ export const HomePage = () => {
     })();
   }, [pairId, pairLoading, navigate]);
 
+  const weather = useWeather(hearing?.prefecture ?? undefined);
+
+  const scoreMap = useMemo<Map<string, ScoreBreakdown>>(() => {
+    if (!hearing) return new Map();
+    return new Map(items.map((item) => [item.itemId, scoreItem(item, hearing, weather)]));
+  }, [items, hearing, weather]);
+
   const activeItems = items.filter((i) => i.status !== "done");
   const doneItems   = items.filter((i) => i.status === "done");
   const goItems     = activeItems.filter((i) => i.isWant);
   const goodItems   = activeItems.filter((i) => !i.isWant && (i.matchTier ?? "good") !== "try");
   const tryItems    = activeItems.filter((i) => !i.isWant && i.matchTier === "try");
 
-  const sortedGoItems   = applySearch(goItems);
-  const sortedGoodBase  = filter === "all" ? goodItems : goodItems.filter((i) => i.category === filter);
-  const filteredGood    = applySearch(sortedGoodBase);
-  const filteredTryBase = filter === "all" ? tryItems : tryItems.filter((i) => i.category === filter);
-  const filteredTry     = applySearch(filteredTryBase);
+  const applyFilter = (arr: Item[]) =>
+    selectedCategories.length === 0 ? arr : arr.filter((i) => selectedCategories.includes(i.category));
+  const applySort = (arr: Item[]) =>
+    sortOrder === "score"
+      ? [...arr].sort((a, b) => (scoreMap.get(b.itemId)?.total ?? 0) - (scoreMap.get(a.itemId)?.total ?? 0))
+      : arr;
+  const applyAll = (arr: Item[]) => applySort(applyFilter(applySearch(arr)));
+
+  const sortedGoItems = applyFilter(applySearch(goItems));
+  const filteredGood  = applyAll(goodItems);
+  const filteredTry   = applyAll(tryItems);
 
   const progress = items.length > 0 ? doneItems.length / items.length : 0;
 
@@ -226,26 +240,76 @@ export const HomePage = () => {
       </header>
 
       {/* ── フィルター + 並び替え ── */}
-      <div style={{ flexShrink: 0, display: "flex", alignItems: "center",
-                    background: "var(--color-bg)", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
-        <span style={{ fontSize: 10, color: "var(--color-text-soft)", flexShrink: 0,
-                       padding: "0 6px 0 12px", fontFamily: "var(--font-sans)",
-                       letterSpacing: "0.04em" }}>カテゴリ</span>
-        <div data-guide="filter-area"
-             style={{ flex: 1, padding: "4px 0", display: "flex", gap: 6,
-                      overflowX: "auto", scrollbarWidth: "none" }}>
-          {(["all", ...CATEGORIES] as Filter[]).map((f) => (
-            <button key={f} onClick={() => setFilter(f)}
-                    style={{ flexShrink: 0, fontSize: 11, padding: "5px 13px",
-                             borderRadius: 20, whiteSpace: "nowrap",
-                             fontFamily: "var(--font-sans)", cursor: "pointer",
-                             border: filter === f ? "none" : "1px solid rgba(0,0,0,0.12)",
-                             background: filter === f ? "var(--color-text-main)" : "transparent",
-                             color: filter === f ? "var(--color-bg)" : "#5C4A35" }}>
-              {f === "all" ? "すべて" : (CATEGORY_LABEL[f] ?? f)}
-            </button>
-          ))}
+      <div data-guide="filter-area"
+           style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 8,
+                    padding: "6px 12px", background: "var(--color-bg)",
+                    borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
+        {/* カテゴリ ドロップダウン */}
+        <div style={{ position: "relative" }}>
+          <button
+            onClick={() => setCatOpen((o) => !o)}
+            style={{ display: "flex", alignItems: "center", gap: 4,
+                     fontSize: 12, padding: "5px 10px", borderRadius: 20,
+                     border: selectedCategories.length > 0 ? "none" : "1px solid rgba(0,0,0,0.15)",
+                     background: selectedCategories.length > 0 ? "var(--color-text-main)" : "transparent",
+                     color: selectedCategories.length > 0 ? "var(--color-bg)" : "var(--color-text-main)",
+                     fontFamily: "var(--font-sans)", cursor: "pointer", whiteSpace: "nowrap" }}>
+            カテゴリ: {selectedCategories.length === 0 ? "すべて" : `${selectedCategories.length}件`}
+            <span style={{ fontSize: 9, opacity: 0.7 }}>▾</span>
+          </button>
+          {catOpen && (
+            <>
+              <div onClick={() => setCatOpen(false)}
+                   style={{ position: "fixed", inset: 0, zIndex: 40 }} />
+              <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 50,
+                            background: "var(--color-bg)", borderRadius: 12,
+                            boxShadow: "0 4px 20px rgba(0,0,0,0.15)",
+                            minWidth: 160, padding: "6px 0", overflow: "hidden" }}>
+                <button
+                  onClick={() => { setSelectedCategories([]); setCatOpen(false); }}
+                  style={{ width: "100%", padding: "8px 14px", textAlign: "left",
+                           fontSize: 13, fontFamily: "var(--font-sans)",
+                           background: selectedCategories.length === 0 ? "rgba(0,0,0,0.06)" : "transparent",
+                           border: "none", cursor: "pointer", color: "var(--color-text-main)" }}>
+                  すべて
+                </button>
+                {CATEGORIES.map((cat) => (
+                  <button key={cat}
+                    onClick={() => setSelectedCategories((prev) =>
+                      prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]
+                    )}
+                    style={{ width: "100%", padding: "8px 14px", textAlign: "left",
+                             display: "flex", alignItems: "center", gap: 8,
+                             fontSize: 13, fontFamily: "var(--font-sans)",
+                             background: selectedCategories.includes(cat) ? "rgba(0,0,0,0.06)" : "transparent",
+                             border: "none", cursor: "pointer", color: "var(--color-text-main)" }}>
+                    <span style={{ fontSize: 11, width: 14, color: "var(--color-primary)",
+                                   fontWeight: 700, flexShrink: 0 }}>
+                      {selectedCategories.includes(cat) ? "✓" : ""}
+                    </span>
+                    {CATEGORY_LABEL[cat] ?? cat}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
+
+        {/* 並び替え */}
+        <select
+          data-guide="sort-select"
+          value={sortOrder}
+          onChange={(e) => setSortOrder(e.target.value as "score" | "createdAt")}
+          style={{ fontSize: 12, padding: "5px 10px", borderRadius: 20,
+                   border: "1px solid rgba(0,0,0,0.15)", background: "transparent",
+                   color: "var(--color-text-main)", fontFamily: "var(--font-sans)",
+                   cursor: "pointer", appearance: "none",
+                   WebkitAppearance: "none", paddingRight: 22,
+                   backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%235C4A35' opacity='.5'/%3E%3C/svg%3E\")",
+                   backgroundRepeat: "no-repeat", backgroundPosition: "right 8px center" }}>
+          <option value="createdAt">新しい順</option>
+          <option value="score">おすすめ順</option>
+        </select>
       </div>
 
       {/* ── 検索窓 ── */}
@@ -303,10 +367,15 @@ export const HomePage = () => {
                             gap: 10,
                             overflowX: "auto",
                             scrollbarWidth: "none" }}>
-                {filteredGood.map((item) => (
-                  <GoodCard key={item.itemId} item={item}
-                            onTap={() => navigateToDetail(item.itemId)} />
-                ))}
+                {filteredGood.map((item) => {
+                  const bd = scoreMap.get(item.itemId);
+                  return (
+                    <GoodCard key={item.itemId} item={item}
+                              breakdown={bd}
+                              onTap={() => navigateToDetail(item.itemId)}
+                              onScoreTap={() => bd && setBreakdownItem({ item, bd })} />
+                  );
+                })}
               </div>
             </>
           ) : (
@@ -314,7 +383,7 @@ export const HomePage = () => {
               <EmptyState onAskAI={() => navigate("/suggest")} />
             )
           )}
-          {filteredGood.length === 0 && goodItems.length > 0 && (
+          {filteredGood.length === 0 && goodItems.length > 0 && selectedCategories.length > 0 && (
             <div style={{ padding: "40px 20px", textAlign: "center" }}>
               <p style={{ fontSize: 13, color: "var(--color-text-soft)" }}>
                 このカテゴリにはアイテムがありません
@@ -335,10 +404,15 @@ export const HomePage = () => {
                           gap: 10,
                           overflowX: "auto",
                           scrollbarWidth: "none" }}>
-              {filteredTry.map((item) => (
-                <GoodCard key={item.itemId} item={item}
-                          onTap={() => navigateToDetail(item.itemId)} />
-              ))}
+              {filteredTry.map((item) => {
+                const bd = scoreMap.get(item.itemId);
+                return (
+                  <GoodCard key={item.itemId} item={item}
+                            breakdown={bd}
+                            onTap={() => navigateToDetail(item.itemId)}
+                            onScoreTap={() => bd && setBreakdownItem({ item, bd })} />
+                );
+              })}
             </div>
           </div>
         )}
@@ -405,6 +479,15 @@ export const HomePage = () => {
                        display: "flex", alignItems: "center", justifyContent: "center" }}>
         +
       </button>
+
+      {/* ── おすすめ度 内訳モーダル ── */}
+      {breakdownItem && (
+        <ScoreBreakdownModal
+          item={breakdownItem.item}
+          bd={breakdownItem.bd}
+          onClose={() => setBreakdownItem(null)}
+        />
+      )}
 
       {/* ── ホームガイド（初回のみ） ── */}
       {showGuide && !loading && items.length > 0 && (
@@ -601,6 +684,65 @@ const SectionLabel = ({ children, style }: { children: React.ReactNode; style?: 
   </p>
 );
 
+const ScoreBreakdownModal = ({ item, bd, onClose }: {
+  item: Item; bd: ScoreBreakdown; onClose: () => void;
+}) => {
+  const rows: { label: string; pts: number; na: boolean; icon: string }[] = [
+    { label: "カテゴリ一致",  pts: bd.genres,    na: false,                         icon: bd.genres > 0    ? "✓" : "✗" },
+    { label: "屋内外一致",    pts: bd.indoor,    na: false,                         icon: bd.indoor > 0    ? "✓" : "✗" },
+    { label: "子連れ条件",    pts: bd.children,  na: item.kidsFriendly === undefined, icon: bd.children > 0  ? "✓" : item.kidsFriendly === undefined ? "−" : "✗" },
+    { label: "交通手段",      pts: bd.transport, na: item.access === undefined,      icon: bd.transport > 0 ? "✓" : item.access === undefined ? "−" : "✗" },
+    { label: "予算",          pts: bd.budget,    na: item.budgetLevel === undefined,  icon: bd.budget >= 15  ? "✓" : bd.budget > 0 ? "△" : item.budgetLevel === undefined ? "−" : "✗" },
+    { label: "今の季節",      pts: bd.season,    na: item.seasonBest === undefined,  icon: bd.season > 0    ? "✓" : item.seasonBest === undefined ? "−" : "✗" },
+    { label: "天気補正",      pts: bd.weather,   na: item.weatherSensitive === undefined, icon: bd.weather > 0 ? "✓" : bd.weather < 0 ? "✗" : "−" },
+  ];
+  return (
+    <div onClick={onClose}
+         style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 300,
+                  display: "flex", alignItems: "flex-end" }}>
+      <div onClick={(e) => e.stopPropagation()}
+           style={{ width: "100%", background: "var(--color-bg)",
+                    borderRadius: "20px 20px 0 0", padding: "24px 20px 48px" }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 4 }}>
+          <span style={{ fontSize: 22, fontWeight: 700, color: "var(--color-primary)",
+                         fontFamily: "var(--font-sans)" }}>
+            おすすめ度 {bd.total}%
+          </span>
+        </div>
+        <p style={{ fontSize: 12, color: "var(--color-text-soft)", marginBottom: 16,
+                    fontFamily: "var(--font-sans)" }}>
+          {item.title}
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+          {rows.map(({ label, pts, na, icon }) => (
+            <div key={label}
+                 style={{ display: "flex", alignItems: "center", gap: 10,
+                          padding: "9px 0", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
+              <span style={{ fontSize: 14, width: 18, flexShrink: 0,
+                             color: icon === "✓" ? "#2d6a3f" : icon === "△" ? "#d97706" : icon === "✗" ? "#b85450" : "#bbb" }}>
+                {icon}
+              </span>
+              <span style={{ flex: 1, fontSize: 13, color: "var(--color-text-main)",
+                             fontFamily: "var(--font-sans)" }}>
+                {label}
+              </span>
+              <span style={{ fontSize: 13, fontWeight: 600, minWidth: 44, textAlign: "right",
+                             fontFamily: "var(--font-sans)",
+                             color: na ? "#bbb" : pts > 0 ? "#2d6a3f" : pts < 0 ? "#b85450" : "var(--color-text-soft)" }}>
+                {na ? "情報なし" : pts > 0 ? `+${pts}` : pts < 0 ? `${pts}` : "±0"}
+              </span>
+            </div>
+          ))}
+        </div>
+        <p style={{ fontSize: 11, color: "var(--color-text-soft)", marginTop: 14, textAlign: "center",
+                    fontFamily: "var(--font-sans)" }}>
+          ヒアリング設定との照合スコアです。プランを更新すると変わります。
+        </p>
+      </div>
+    </div>
+  );
+};
+
 const GuideDetailOverlay = ({ item }: { item: Item }) => {
   const hasPhoto = !!item.placePhotoRef && item.placePhotoRef.startsWith("https://");
   return (
@@ -713,16 +855,14 @@ const GoCard = ({ item, onClick }:
   );
 };
 
-const GoodCard = ({ item, onTap }:
-  { item: Item; onTap: () => void }) => {
+const GoodCard = ({ item, onTap, breakdown, onScoreTap }:
+  { item: Item; onTap: () => void; breakdown?: ScoreBreakdown; onScoreTap?: () => void }) => {
   const s = CATEGORY_STYLE[item.category] ?? CATEGORY_STYLE["other"];
   const photo = heroUrl(item);
   return (
-    // カード全体をボタンにしてタップ判定を全面に
     <button onClick={onTap}
             style={{ position: "relative", borderRadius: 12, overflow: "hidden", height: "calc((50vw - 25px) * 0.618)",
                      border: "none", padding: 0, cursor: "pointer", width: "100%" }}>
-      {/* 背景：写真 or グラデーション */}
       {photo ? (
         <img src={photo} alt={item.title} loading="lazy"
              style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
@@ -730,7 +870,6 @@ const GoodCard = ({ item, onTap }:
       ) : (
         <div style={{ position: "absolute", inset: 0, background: s.bg }} />
       )}
-      {/* 絵文字（写真なしのみ） */}
       {!photo && (
         <div style={{ position: "absolute", inset: 0, display: "flex",
                       alignItems: "center", justifyContent: "center" }}>
@@ -740,11 +879,22 @@ const GoodCard = ({ item, onTap }:
           </span>
         </div>
       )}
-      {/* 暗幕オーバーレイ */}
       <div style={{ position: "absolute", inset: 0,
                     background: "linear-gradient(to bottom, rgba(0,0,0,0) 0%, transparent 45%, rgba(0,0,0,0.8) 80%)",
                     pointerEvents: "none" }} />
-      {/* タイトル・カテゴリ（下部） */}
+      {/* For You バッジ（70%以上のみ） */}
+      {breakdown !== undefined && breakdown.total >= 70 && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onScoreTap?.(); }}
+          style={{ position: "absolute", top: 8, right: 8, zIndex: 3,
+                   background: "rgba(255,255,255,0.88)", backdropFilter: "blur(6px)",
+                   borderRadius: 20, padding: "3px 9px",
+                   fontSize: 10, color: "var(--color-primary)", fontWeight: 700,
+                   fontFamily: "var(--font-sans)", letterSpacing: "0.03em",
+                   border: "none", cursor: "pointer", whiteSpace: "nowrap" }}>
+          ✨ For You
+        </button>
+      )}
       <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 2,
                     padding: "8px 10px 9px 10px", textAlign: "left" }}>
         <div style={{ fontSize: 10, letterSpacing: "0.08em",

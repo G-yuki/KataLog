@@ -34,7 +34,7 @@ interface Props {
 
 export const UpdateHearingForm = ({ hearing, onChange, onSubmit, submitting }: Props) => {
   const set = (key: keyof Hearing, value: string | string[] | undefined) =>
-    onChange({ ...hearing, [key]: value });
+    onChange({ ...hearing, [key]: value } as Partial<Hearing>);
 
   const toggleGenre = (id: string) => {
     const genres = hearing.genres ?? [];

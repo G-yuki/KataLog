@@ -9,6 +9,7 @@ import { httpsCallable } from "firebase/functions";
 import { functions } from "../../../firebase/functions";
 import { CATEGORY_STYLE, CATEGORY_LABEL } from "../../../lib/constants";
 import { type Timestamp } from "firebase/firestore";
+import { heroUrl } from "../../../lib/item";
 import type { Item } from "../../../types";
 
 const todayYM = () => {
@@ -39,13 +40,6 @@ const getAiLabel = (start: string, end: string): string => {
 
 const fmtMonthYear = (d: Date, multiYear: boolean) =>
   multiYear ? `${d.getFullYear()}/${d.getMonth() + 1}月` : `${d.getMonth() + 1}月`;
-
-const heroUrl = (item: Item): string | null => {
-  if (item.pinnedPhotoUrl) return item.pinnedPhotoUrl;
-  if (item.userPhotos?.length) return item.userPhotos[0];
-  if (item.placePhotoRef?.startsWith("https://")) return item.placePhotoRef;
-  return null;
-};
 
 export const MemoryPage = () => {
   const navigate = useNavigate();
