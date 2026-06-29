@@ -26,6 +26,7 @@ export const HomePage = () => {
   const [selectedCategories, setSelectedCategories] = useState<Category[]>([]);
   const [sortOrder, setSortOrder] = useState<"score" | "createdAt">("createdAt");
   const [catOpen, setCatOpen] = useState(false);
+  const [sortOpen, setSortOpen] = useState(false);
   const [hearing, setHearing] = useState<Hearing | null>(null);
   const [breakdownItem, setBreakdownItem] = useState<{ item: Item; bd: ScoreBreakdown } | null>(null);
   const [search, setSearch] = useState("");
@@ -62,6 +63,17 @@ export const HomePage = () => {
     } catch { /* ignore */ }
   }, [pairId, loading]);
 
+  // フィルター・ソート変更時に自動保存（ページ切り替え後も復元できるように）
+  useEffect(() => {
+    if (!pairId || !restoredRef.current) return;
+    try {
+      sessionStorage.setItem(`home_state_${pairId}`, JSON.stringify({
+        selectedCategories, sortOrder, doneOpen,
+        scrollTop: scrollRef.current?.scrollTop ?? 0,
+      }));
+    } catch { /* ignore */ }
+  }, [sortOrder, selectedCategories, doneOpen, pairId]);
+
   const navigateToDetail = (itemId: string) => {
     if (pairId) {
       try {
@@ -96,7 +108,6 @@ export const HomePage = () => {
   const [addedToast, setAddedToast] = useState(false);
   const modalContentRef = useRef<HTMLDivElement>(null);
   const touchStartY = useRef(0);
-  const touchStartFromHeader = useRef(false);
 
   const closeAddModal = () => {
     setShowAddModal(false);
@@ -111,18 +122,12 @@ export const HomePage = () => {
     return () => window.removeEventListener("popstate", handlePop);
   }, [showAddModal]);
 
-  const handleHeaderTouchStart = (e: React.TouchEvent) => {
-    touchStartY.current = e.touches[0].clientY;
-    touchStartFromHeader.current = true;
-  };
   const handleModalTouchStart = (e: React.TouchEvent) => {
     touchStartY.current = e.touches[0].clientY;
-    touchStartFromHeader.current = false;
   };
   const handleModalTouchEnd = (e: React.TouchEvent) => {
     const delta = e.changedTouches[0].clientY - touchStartY.current;
-    const canClose = touchStartFromHeader.current || (modalContentRef.current?.scrollTop ?? 0) === 0;
-    if (delta > 60 && canClose) closeAddModal();
+    if (delta > 60 && (modalContentRef.current?.scrollTop ?? 0) === 0) closeAddModal();
   };
 
   const resetAddModal = () => {
@@ -251,7 +256,7 @@ export const HomePage = () => {
                      color: selectedCategories.length > 0 ? "var(--color-bg)" : "var(--color-text-main)",
                      fontFamily: "var(--font-sans)", cursor: "pointer", whiteSpace: "nowrap" }}>
             カテゴリ: {selectedCategories.length === 0 ? "すべて" : `${selectedCategories.length}件`}
-            <span style={{ fontSize: 9, opacity: 0.7 }}>▾</span>
+            <span style={{ fontSize: 13, opacity: 0.85 }}>▾</span>
           </button>
           {catOpen && (
             <>
@@ -292,20 +297,46 @@ export const HomePage = () => {
         </div>
 
         {/* 並び替え */}
-        <select
-          data-guide="sort-select"
-          value={sortOrder}
-          onChange={(e) => setSortOrder(e.target.value as "score" | "createdAt")}
-          style={{ fontSize: 12, padding: "5px 10px", borderRadius: 20,
-                   border: "1px solid rgba(0,0,0,0.15)", background: "transparent",
-                   color: "var(--color-text-main)", fontFamily: "var(--font-sans)",
-                   cursor: "pointer", appearance: "none",
-                   WebkitAppearance: "none", paddingRight: 22,
-                   backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%235C4A35' opacity='.5'/%3E%3C/svg%3E\")",
-                   backgroundRepeat: "no-repeat", backgroundPosition: "right 8px center" }}>
-          <option value="createdAt">新しい順</option>
-          <option value="score">おすすめ順</option>
-        </select>
+        <div style={{ position: "relative" }}>
+          <button
+            data-guide="sort-select"
+            onClick={() => setSortOpen((o) => !o)}
+            style={{ display: "flex", alignItems: "center", gap: 4,
+                     fontSize: 12, padding: "5px 10px", borderRadius: 20,
+                     border: sortOrder !== "createdAt" ? "none" : "1px solid rgba(0,0,0,0.15)",
+                     background: sortOrder !== "createdAt" ? "var(--color-text-main)" : "transparent",
+                     color: sortOrder !== "createdAt" ? "var(--color-bg)" : "var(--color-text-main)",
+                     fontFamily: "var(--font-sans)", cursor: "pointer", whiteSpace: "nowrap" }}>
+            {sortOrder === "score" ? "おすすめ順" : "新しい順"}
+            <span style={{ fontSize: 13, opacity: 0.85 }}>▾</span>
+          </button>
+          {sortOpen && (
+            <>
+              <div onClick={() => setSortOpen(false)}
+                   style={{ position: "fixed", inset: 0, zIndex: 40 }} />
+              <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 50,
+                            background: "var(--color-bg)", borderRadius: 12,
+                            boxShadow: "0 4px 20px rgba(0,0,0,0.15)",
+                            minWidth: 120, padding: "6px 0", overflow: "hidden" }}>
+                {([["createdAt", "新しい順"], ["score", "おすすめ順"]] as const).map(([val, lbl]) => (
+                  <button key={val}
+                    onClick={() => { setSortOrder(val); setSortOpen(false); }}
+                    style={{ width: "100%", padding: "8px 14px", textAlign: "left",
+                             display: "flex", alignItems: "center", gap: 8,
+                             fontSize: 13, fontFamily: "var(--font-sans)",
+                             background: sortOrder === val ? "rgba(0,0,0,0.06)" : "transparent",
+                             border: "none", cursor: "pointer", color: "var(--color-text-main)" }}>
+                    <span style={{ fontSize: 11, width: 14, color: "var(--color-primary)",
+                                   fontWeight: 700, flexShrink: 0 }}>
+                      {sortOrder === val ? "✓" : ""}
+                    </span>
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {/* ── 検索窓 ── */}
@@ -515,16 +546,10 @@ export const HomePage = () => {
                style={{ width: "100%", background: "var(--color-bg)", borderRadius: "20px 20px 0 0",
                         padding: "12px 20px 48px", display: "flex", flexDirection: "column", gap: 16,
                         maxHeight: "90dvh", overflowY: "auto", scrollbarWidth: "none" }}>
-            {/* ドラッグインジケーター + タイトル（このエリアをスワイプで閉じる） */}
-            <div onTouchStart={(e) => { handleHeaderTouchStart(e); e.stopPropagation(); }}>
-              <div style={{ display: "flex", justifyContent: "center", marginBottom: 4 }}>
-                <div style={{ width: 36, height: 4, borderRadius: 2,
-                              background: "rgba(0,0,0,0.15)" }} />
-              </div>
-              <h2 style={{ fontFamily: "var(--font-sans)", fontSize: 17, fontWeight: 500,
-                           color: "var(--color-text-main)", textAlign: "center" }}>
-                アイテム追加
-              </h2>
+            {/* ドラッグインジケーター */}
+            <div style={{ display: "flex", justifyContent: "center", paddingBottom: 4 }}>
+              <div style={{ width: 36, height: 4, borderRadius: 2,
+                            background: "rgba(0,0,0,0.15)" }} />
             </div>
 
             {/* タイトル */}
@@ -944,9 +969,9 @@ const GoodCard = ({ item, onTap, breakdown, onScoreTap }:
         <button
           onClick={(e) => { e.stopPropagation(); onScoreTap?.(); }}
           style={{ position: "absolute", top: 8, right: 8, zIndex: 3,
-                   background: "rgba(255,255,255,0.88)", backdropFilter: "blur(6px)",
+                   background: "rgba(0,0,0,0.6)",
                    borderRadius: 20, padding: "3px 9px",
-                   fontSize: 10, color: "var(--color-primary)", fontWeight: 700,
+                   fontSize: 10, color: "#fff", fontWeight: 700,
                    fontFamily: "var(--font-sans)", letterSpacing: "0.03em",
                    border: "none", cursor: "pointer", whiteSpace: "nowrap" }}>
           ✨ For You

@@ -8,8 +8,10 @@ import { Loading } from "../../../components/Loading";
 import { usePair } from "../../../contexts/PairContext";
 import { db } from "../../../firebase/firestore";
 import { doc, getDoc } from "firebase/firestore";
-import type { Item } from "../../../types";
+import type { Item, Hearing } from "../../../types";
 import { PLACE_CATEGORIES, CATEGORY_LABEL } from "../../../lib/constants";
+import { scoreItem } from "../../../lib/scoring";
+import { useWeather } from "../../../hooks/useWeather";
 import { usePhotoUpload, MAX_PHOTOS } from "../hooks/usePhotoUpload";
 import { HeaderAdjustOverlay } from "../components/HeaderAdjustOverlay";
 import { PhotoViewer } from "../components/PhotoViewer";
@@ -45,9 +47,23 @@ export const ItemDetailPage = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [headerPosY, setHeaderPosY] = useState(50);
   const [showHeaderAdjust, setShowHeaderAdjust] = useState(false);
+  const [hearing, setHearing] = useState<Hearing | null>(null);
   const enrichCalled = useRef(false);
 
   const item: Item | undefined = items.find((i) => i.itemId === itemId);
+
+  useEffect(() => {
+    if (!pairId) return;
+    getDoc(doc(db, "pairs", pairId)).then((snap) => {
+      if (snap.exists()) setHearing((snap.data().hearing as Hearing) ?? null);
+    });
+  }, [pairId]);
+
+  const weather = useWeather(hearing?.prefecture ?? undefined);
+  const score = useMemo(
+    () => item && hearing ? scoreItem(item, hearing, weather) : null,
+    [item, hearing, weather]
+  );
 
   const photo = usePhotoUpload(pairId, item, saveDetail);
 
@@ -304,6 +320,16 @@ export const ItemDetailPage = () => {
         <div className="flex gap-2 mb-5 flex-wrap items-center">
           <Tag label={CATEGORY_LABEL[item.category] ?? item.category} />
           <Tag label={item.type === "outdoor" ? "屋外" : "屋内"} />
+          {score !== null && (
+            <span style={{ fontSize: 12, fontWeight: 700, color: "#fff",
+                           background: score.total >= 70 ? "rgba(0,0,0,0.72)"
+                                      : score.total >= 40 ? "rgba(0,0,0,0.5)"
+                                      : "rgba(0,0,0,0.32)",
+                           borderRadius: 20, padding: "3px 10px",
+                           fontFamily: "var(--font-sans)" }}>
+              プランとの相性 {score.total}%
+            </span>
+          )}
           {isEnriching && (
             <span style={{ fontSize: 11, color: "var(--color-text-soft)" }}>
               地図情報を取得中...
