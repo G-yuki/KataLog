@@ -66,6 +66,17 @@ service cloud.firestore {
 
         allow read, write: if isPairMember();
       }
+
+      // ── 思い出（メモリー） ──
+      match /memories/{memoryId} {
+        function isPairMember() {
+          let pair = get(/databases/$(database)/documents/pairs/$(pairId));
+          return request.auth != null
+                 && request.auth.uid in pair.data.members;
+        }
+
+        allow read, write: if isPairMember();
+      }
     }
 
     // ── お問い合わせ ──

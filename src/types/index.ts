@@ -100,6 +100,19 @@ export interface ItemDraft {
   seasonBest?: ("spring" | "summer" | "autumn" | "winter")[];
 }
 
+// ── 思い出 ──────────────────────────────────────
+export interface SavedMemory {
+  memoryId: string;
+  type: "text" | "image" | "video" | "music";
+  title: string;
+  period: { from: Timestamp; to: Timestamp };
+  itemCount: number;
+  content: string;
+  thumbnailUrl: string | null;
+  isFavorite: boolean;
+  createdAt: Timestamp;
+}
+
 // ふたりのスワイプ結果保存用（マッチング前）
 export interface PendingItem {
   pendingItemId: string;
