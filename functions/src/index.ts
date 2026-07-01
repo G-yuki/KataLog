@@ -13,6 +13,12 @@ setGlobalOptions({ region: "asia-northeast1", maxInstances: 10 });
 const geminiApiKey  = defineSecret("GEMINI_API_KEY");
 const mapsServerKey = defineSecret("MAPS_SERVER_KEY");
 
+// "東京都" "神奈川県" "北海道" などにマッチ
+function extractPrefecture(formattedAddress: string): string | null {
+  const m = formattedAddress.match(/\S{1,4}[都道府県]/);
+  return m ? m[0] : null;
+}
+
 // ── アイテム生成（ヒアリング結果 → 50件JSON） ──────────────
 export const generateItems = onCall(
   { invoker: "public", secrets: [geminiApiKey], enforceAppCheck: false },
@@ -305,7 +311,7 @@ export const enrichItem = onCall(
 
     // Step 1: Text Search（Essentials tier）
     // 失敗時は place=null のまま続行 → Firestore に placeId="" を確定書き込みして再呼び出しを防ぐ
-    type PlaceResult = { id: string; location?: { latitude: number; longitude: number }; types?: string[] };
+    type PlaceResult = { id: string; location?: { latitude: number; longitude: number }; types?: string[]; formattedAddress?: string };
     let place: PlaceResult | null = null;
     try {
       const searchRes = await fetch("https://places.googleapis.com/v1/places:searchText", {
@@ -313,7 +319,7 @@ export const enrichItem = onCall(
         headers: {
           "Content-Type": "application/json",
           "X-Goog-Api-Key": mapsServerKey.value(),
-          "X-Goog-FieldMask": "places.id,places.location,places.types",
+          "X-Goog-FieldMask": "places.id,places.location,places.types,places.formattedAddress",
         },
         body: JSON.stringify({
           textQuery,
@@ -379,6 +385,9 @@ export const enrichItem = onCall(
 
     // Firestore 確定書き込み（Step1/2 の成否にかかわらず必ず実行）
     // placeId="" = 「検索済み・場所なし or Step1失敗」→ 以降の詳細画面オープンで再呼び出しされない
+    const extractedPref = place?.formattedAddress
+      ? extractPrefecture(place.formattedAddress)
+      : null;
     await admin.firestore()
       .doc(`pairs/${pairId}/items/${itemId}`)
       .update({
@@ -388,6 +397,8 @@ export const enrichItem = onCall(
         lat:          place?.location?.latitude ?? null,
         lng:          place?.location?.longitude ?? null,
         placeTypes:   place?.types ?? null,
+        // 日本国内の場所が特定できた場合のみ prefecture を上書き（"全国" → 具体地域名）
+        ...(extractedPref ? { prefecture: extractedPref } : {}),
       });
 
     return { ok: true };

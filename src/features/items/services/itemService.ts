@@ -103,7 +103,8 @@ export const resetPairList = async (pairId: string): Promise<void> => {
 /** Suggest で選択したアイテムをリストに直接追加 */
 export const addSuggestedItems = async (
   pairId: string,
-  drafts: import("../../../types").ItemDraft[]
+  drafts: import("../../../types").ItemDraft[],
+  area?: { prefecture?: string; overseas?: string }
 ): Promise<void> => {
   const batch = writeBatch(db);
   drafts.forEach((draft) => {
@@ -120,6 +121,8 @@ export const addSuggestedItems = async (
       placeName: null,
       placeRating: null,
       placePhotoRef: null,
+      ...(area?.overseas  ? { overseas: area.overseas }    : {}),
+      ...(area?.prefecture ? { prefecture: area.prefecture } : {}),
       createdAt: serverTimestamp(),
     });
   });
@@ -179,7 +182,8 @@ export const addManualItem = async (
  */
 export const savePendingItemsDraft = async (
   pairId: string,
-  drafts: ItemDraft[]
+  drafts: ItemDraft[],
+  area?: { prefecture?: string; overseas?: string }
 ): Promise<void> => {
   const batch = writeBatch(db);
   drafts.forEach((draft) => {
@@ -188,6 +192,8 @@ export const savePendingItemsDraft = async (
       ...draft,
       creatorSwipe: null,
       partnerSwipe: null,
+      ...(area?.overseas   ? { overseas: area.overseas }    : {}),
+      ...(area?.prefecture ? { prefecture: area.prefecture } : {}),
       createdAt: serverTimestamp(),
     });
   });
@@ -315,6 +321,8 @@ export const finalizePairMatching = async (pairId: string): Promise<void> => {
       ...(matchTier === "try" && {
         expireAt: Timestamp.fromDate(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)),
       }),
+      ...(data.overseas   ? { overseas: data.overseas }    : {}),
+      ...(data.prefecture ? { prefecture: data.prefecture } : {}),
       placeId:        null,
       placeName:      null,
       placeRating:    null,

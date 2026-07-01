@@ -74,7 +74,11 @@ export const HearingPage = () => {
       // AI生成 → pendingItems として保存（両者がスワイプ前に参照）
       const drafts = await generate(hearing as Parameters<typeof generate>[0]);
       if (!drafts) throw new Error("generation failed");
-      await savePendingItemsDraft(pairId, drafts);
+      const isZenkoku = hearing.range === "anywhere" || hearing.prefecture === "全国";
+      const area = hearing.overseas
+        ? { overseas: hearing.overseas }
+        : { prefecture: isZenkoku ? "全国" : hearing.prefecture };
+      await savePendingItemsDraft(pairId, drafts, area);
 
       navigate("/setup/swipe");
     } catch {

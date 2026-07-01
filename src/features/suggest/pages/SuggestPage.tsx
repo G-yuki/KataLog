@@ -127,7 +127,11 @@ export const SuggestPage = () => {
     if (!pairId || selected.size === 0) return;
     setSaving(true);
     const drafts = [...selected].map((i) => suggestions[i]);
-    await addSuggestedItems(pairId, drafts);
+    const isZenkoku = hearing?.range === "anywhere" || hearing?.prefecture === "全国";
+    const area = hearing?.overseas
+      ? { overseas: hearing.overseas }
+      : { prefecture: isZenkoku ? "全国" : hearing?.prefecture };
+    await addSuggestedItems(pairId, drafts, area);
     updateDoc(doc(db, "pairs", pairId), { pendingSuggestions: deleteField() }).catch(() => {});
     setSaving(false);
     setStep("done");

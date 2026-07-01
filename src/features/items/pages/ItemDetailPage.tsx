@@ -322,7 +322,9 @@ export const ItemDetailPage = () => {
             <span style={{ fontSize: 12, fontWeight: 600, padding: "3px 10px",
                            borderRadius: 20, fontFamily: "var(--font-sans)",
                            background: "var(--color-primary-light)", color: "var(--color-primary)" }}>
-              {item.prefecture ? `📍 ${item.prefecture}` : `✈️ ${item.overseas}`}
+              {item.prefecture
+                ? `📍 ${item.prefecture === "全国" ? "全国" : item.prefecture.replace(/[都府県]$/, "")}`
+                : `✈️ ${item.overseas}`}
             </span>
           )}
           {isEnriching && (

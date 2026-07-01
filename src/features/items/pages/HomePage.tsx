@@ -20,9 +20,6 @@ import type { Item, Category, ItemType, ItemStatus, Hearing } from "../../../typ
 export const HomePage = () => {
   const navigate = useNavigate();
   const { pairId, loading: pairLoading } = usePair();
-  const [pairNames, setPairNames] = useState(() =>
-    pairId ? (sessionStorage.getItem(`pairNames_${pairId}`) ?? "") : ""
-  );
   const { items, loading } = useItems(pairId);
 
   const [selectedCategories, setSelectedCategories] = useState<Category[]>([]);
@@ -184,9 +181,7 @@ export const HomePage = () => {
       const names = await Promise.all(members.map((uid) => getDisplayName(uid)));
       const validNames = names.filter(Boolean) as string[];
       if (validNames.length > 0) {
-        const joined = validNames.join(" & ");
-        setPairNames(joined);
-        sessionStorage.setItem(`pairNames_${pairId}`, joined);
+        sessionStorage.setItem(`pairNames_${pairId}`, validNames.join(" & "));
       }
     })();
   }, [pairId, pairLoading, navigate]);
