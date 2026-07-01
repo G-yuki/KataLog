@@ -40,10 +40,11 @@ export type Category =
   | "sports"
   | "movie"
   | "book"
-  | "game"
+  | "cafe"
   | "theme"
   | "onsen"
-  | "other";
+  | "other"
+  | "game"; // 旧カテゴリ（後方互換）
 
 export type ItemType = "outdoor" | "indoor";
 export type Difficulty = "easy" | "special";

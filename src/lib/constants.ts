@@ -1,43 +1,44 @@
 // src/lib/constants.ts
 
 export const GENRES = [
-  { id: "nature",  label: "自然・アウトドア", emoji: "🏕️" },
-  { id: "gourmet", label: "グルメ・食べ歩き",  emoji: "🍜" },
-  { id: "art",     label: "アート・文化",      emoji: "🎨" },
-  { id: "music",   label: "音楽・ライブ",      emoji: "🎵" },
-  { id: "sports",  label: "スポーツ",          emoji: "⚽" },
-  { id: "movie",   label: "映画・ドラマ",      emoji: "🎬" },
-  { id: "book",    label: "本・読書",          emoji: "📚" },
-  { id: "game",    label: "ゲーム・カフェ",    emoji: "🎮" },
-  { id: "theme",   label: "テーマパーク",      emoji: "🎡" },
-  { id: "onsen",   label: "温泉・スパ",        emoji: "♨️" },
+  { id: "nature",  label: "アウトドア",    emoji: "🏕️" },
+  { id: "gourmet", label: "グルメ",        emoji: "🍜" },
+  { id: "art",     label: "アート",        emoji: "🎨" },
+  { id: "music",   label: "音楽",          emoji: "🎵" },
+  { id: "sports",  label: "スポーツ",      emoji: "⚽" },
+  { id: "movie",   label: "映画",          emoji: "🎬" },
+  { id: "book",    label: "読書",          emoji: "📚" },
+  { id: "cafe",    label: "カフェ",        emoji: "☕" },
+  { id: "theme",   label: "テーマパーク",  emoji: "🎡" },
+  { id: "onsen",   label: "温泉",          emoji: "♨️" },
 ] as const;
 
 // アイテム category の値（GENRESのid + "other"）
 export const CATEGORIES = [
   "nature","gourmet","art","music","sports",
-  "movie","book","game","theme","onsen","other",
+  "movie","book","cafe","theme","onsen","other",
 ] as const;
 
 // カテゴリの日本語表示ラベル（画面表示に使う）
 export const CATEGORY_LABEL: Record<string, string> = {
-  nature:  "自然・アウトドア",
-  gourmet: "グルメ・食べ歩き",
-  art:     "アート・文化",
-  music:   "音楽・ライブ",
+  nature:  "アウトドア",
+  gourmet: "グルメ",
+  art:     "アート",
+  music:   "音楽",
   sports:  "スポーツ",
-  movie:   "映画・ドラマ",
-  book:    "本・読書",
-  game:    "ゲーム・カフェ",
+  movie:   "映画",
+  book:    "読書",
+  cafe:    "カフェ",
   theme:   "テーマパーク",
-  onsen:   "温泉・スパ",
+  onsen:   "温泉",
   other:   "その他",
+  game:    "ゲーム", // 旧カテゴリ（後方互換）
 };
 
 // Places API enrichを行うカテゴリ（"other"は除外）
 export const PLACE_CATEGORIES = [
   "nature","gourmet","art","music","sports",
-  "movie","book","game","theme","onsen",
+  "movie","book","cafe","theme","onsen",
 ] as const;
 
 // 屋外寄りカテゴリ（SwipePage背景判定用）
@@ -52,7 +53,7 @@ export const PLACES_TYPE_TO_CATEGORY: Record<string, string> = {
   art_gallery:        "art",
   tourist_attraction: "art",
   restaurant:         "gourmet",
-  cafe:               "gourmet",
+  cafe:               "cafe",
   bar:                "gourmet",
   food:               "gourmet",
   bakery:             "gourmet",
@@ -79,10 +80,11 @@ export const CATEGORY_STYLE: Record<string, { bg: string; emoji: string }> = {
   sports:  { bg: "linear-gradient(135deg, #1A3A5C, #0D1E3A)", emoji: "⚽" },
   movie:   { bg: "linear-gradient(135deg, #2A3A5C, #0D1428)", emoji: "🎬" },
   book:    { bg: "linear-gradient(135deg, #3D2B14, #1E1408)", emoji: "📚" },
-  game:    { bg: "linear-gradient(135deg, #2A1840, #110A1E)", emoji: "🎮" },
+  cafe:    { bg: "linear-gradient(135deg, #3A2A14, #1E1408)", emoji: "☕" },
   theme:   { bg: "linear-gradient(135deg, #5C3A1A, #3A2008)", emoji: "🎡" },
   onsen:   { bg: "linear-gradient(135deg, #4A1A1A, #2A0A0A)", emoji: "♨️" },
   other:   { bg: "linear-gradient(135deg, #3A3A2A, #1E1E14)", emoji: "🧭" },
+  game:    { bg: "linear-gradient(135deg, #2A1840, #110A1E)", emoji: "🎮" }, // 旧カテゴリ（後方互換）
 };
 
 // ── ヒアリング選択肢（HearingPage / SuggestPage で共用） ──────────

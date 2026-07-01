@@ -544,6 +544,10 @@ export const MemoryPage = () => {
                       <div style={{ background: "#fff", borderRadius: 14, padding: "20px",
                                     border: "1px solid rgba(0,0,0,0.07)",
                                     boxShadow: "0 2px 12px rgba(30,45,90,0.06)" }}>
+                        <p style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-main)",
+                                    textAlign: "center", fontFamily: "var(--font-sans)", marginBottom: 10 }}>
+                          {periodLabel}
+                        </p>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
                           <div style={{ height: 1, flex: 1, background: "var(--color-border)" }} />
                           <p style={{ fontSize: 10, color: "var(--color-accent)", letterSpacing: "0.12em",
