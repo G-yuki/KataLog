@@ -25,8 +25,10 @@ export const useAuth = () => {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        // ログイン時にユーザーレコードを初期化（displayName は NicknameSetup で設定）
         await saveUserProfile(user.uid);
+        localStorage.setItem("katalog_uid", user.uid);
+      } else {
+        localStorage.removeItem("katalog_uid");
       }
       setState({ user, loading: false, error: null });
     });

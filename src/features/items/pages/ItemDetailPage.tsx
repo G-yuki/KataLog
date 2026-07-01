@@ -9,17 +9,16 @@ import { usePair } from "../../../contexts/PairContext";
 import { db } from "../../../firebase/firestore";
 import { doc, getDoc } from "firebase/firestore";
 import type { Item, Hearing } from "../../../types";
-import { PLACE_CATEGORIES, CATEGORY_LABEL } from "../../../lib/constants";
+import { CATEGORY_LABEL, PLACE_CATEGORIES } from "../../../lib/constants";
 import { scoreItem } from "../../../lib/scoring";
 import { useWeather } from "../../../hooks/useWeather";
 import { usePhotoUpload, MAX_PHOTOS } from "../hooks/usePhotoUpload";
 import { HeaderAdjustOverlay } from "../components/HeaderAdjustOverlay";
 import { PhotoViewer } from "../components/PhotoViewer";
 
-// placeId があれば特定スポットを開く。なければタイトル検索（地名なし → 現在地周辺になる）
-const mapsUrl = (item: Pick<Item, "userPlaceUrl" | "placeId" | "title">) => {
+// URL確定済みならそのURL、なければタイトル検索（周辺エリア表示）
+const mapsUrl = (item: Pick<Item, "userPlaceUrl" | "title">) => {
   if (item.userPlaceUrl) return item.userPlaceUrl;
-  if (item.placeId) return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.title)}&query_place_id=${item.placeId}`;
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.title)}`;
 };
 
@@ -92,36 +91,18 @@ export const ItemDetailPage = () => {
     setHeaderPosY(item.headerPosY ?? 50);
   }, [item]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Places エンリッチ: placeId===null（未検索）のときだけ呼ぶ
-  // placeId===""  → 検索済み・場所なし or Step1失敗で確定済み → スキップ
-  // placeId="xxx" → 検索済み（写真なしも含む）→ スキップ
+  // Places 自動エンリッチ: placeId未取得のPlaceカテゴリアイテムを詳細表示時に自動取得
   useEffect(() => {
-    if (!item || !pairId || enrichCalled.current) return;
-    const needsEnrich =
-      item.placeId === null && (
-        (PLACE_CATEGORIES as readonly string[]).includes(item.category) ||
-        !!item.userPlaceUrl
-      );
-    if (!needsEnrich) return;
-
+    if (!item || !pairId) return;
+    if (item.placeId !== null) return;
+    if (!PLACE_CATEGORIES.includes(item.category as typeof PLACE_CATEGORIES[number])) return;
+    if (enrichCalled.current) return;
     enrichCalled.current = true;
-    (async () => {
-      const pairSnap = await getDoc(doc(db, "pairs", pairId));
-      const hearing = pairSnap.exists() ? pairSnap.data().hearing : undefined;
-      const prefecture = hearing?.range === "anywhere"
-        ? undefined
-        : (hearing?.prefecture as string | undefined);
-
-      const fn = httpsCallable(functions, "enrichItem");
-      fn({
-        pairId,
-        itemId: item.itemId,
-        title: item.title,
-        prefecture,
-        userPlaceUrl: item.userPlaceUrl ?? undefined,
-      });
-    })();
-  }, [item, pairId]);
+    const fn = httpsCallable(functions, "enrichItem");
+    fn({ pairId, itemId: item.itemId, title: item.title, prefecture: item.prefecture ?? undefined }).catch(() => {
+      enrichCalled.current = false;
+    });
+  }, [item?.itemId, item?.placeId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleTitleEdit = () => {
     if (!item) return;
@@ -133,14 +114,20 @@ export const ItemDetailPage = () => {
     if (!item || !pairId) return;
     const trimmed = urlDraft.trim();
     setUrlSaving(true);
-    await saveDetail(item.itemId, { userPlaceUrl: trimmed || null });
-    // URLが変わった場合のみ enrichItem を呼ぶ（同一URL再保存で無駄なAPI呼び出しを防ぐ）
-    if (trimmed && trimmed !== item.userPlaceUrl) {
-      enrichCalled.current = true;
-      const fn = httpsCallable(functions, "enrichItem");
-      fn({ pairId, itemId: item.itemId, title: item.title, userPlaceUrl: trimmed }).catch(() => {
-        enrichCalled.current = false;
-      });
+    if (!trimmed) {
+      // URL削除: placeId もリセットして auto-enrich が再実行されるようにする
+      await saveDetail(item.itemId, { userPlaceUrl: null, placeId: null });
+      enrichCalled.current = false;
+    } else {
+      await saveDetail(item.itemId, { userPlaceUrl: trimmed });
+      // URLが変わった場合のみ enrichItem を呼ぶ
+      if (trimmed !== item.userPlaceUrl) {
+        enrichCalled.current = true;
+        const fn = httpsCallable(functions, "enrichItem");
+        fn({ pairId, itemId: item.itemId, title: item.title, userPlaceUrl: trimmed }).catch(() => {
+          enrichCalled.current = false;
+        });
+      }
     }
     setUrlSaving(false);
     setEditingUrl(false);
@@ -207,9 +194,10 @@ export const ItemDetailPage = () => {
   );
 
   const isDone = item.status === "done";
-  const isPlaceCategory = (PLACE_CATEGORIES as readonly string[]).includes(item.category);
   const hasPhoto = !!headerPhotoUrl;
-  const isEnriching = item.placeId === null && (isPlaceCategory || !!item.userPlaceUrl);
+  const isEnriching = item.placeId === null && (
+    PLACE_CATEGORIES.includes(item.category as typeof PLACE_CATEGORIES[number]) || !!item.userPlaceUrl
+  );
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100dvh",
@@ -249,6 +237,15 @@ export const ItemDetailPage = () => {
               <span style={{ fontSize: 13, color: "#fff", fontWeight: 600 }}>
                 {item.placeRating.toFixed(1)}
               </span>
+            </div>
+          )}
+          {/* おすすめ度バッジ（右上） */}
+          {score !== null && (
+            <div style={{ position: "absolute", top: 12, right: 12, zIndex: 3,
+                          background: "rgba(0,0,0,0.6)", borderRadius: 20,
+                          padding: "3px 9px", fontSize: 10, fontWeight: 700,
+                          color: "#fff", fontFamily: "var(--font-sans)" }}>
+              おすすめ度 {score.total}%
             </div>
           )}
           {/* お気に入りボタン（右下） */}
@@ -316,18 +313,16 @@ export const ItemDetailPage = () => {
           )}
         </div>
 
-        {/* カテゴリ・タグ */}
+        {/* カテゴリ・タグ行 */}
         <div className="flex gap-2 mb-5 flex-wrap items-center">
           <Tag label={CATEGORY_LABEL[item.category] ?? item.category} />
           <Tag label={item.type === "outdoor" ? "屋外" : "屋内"} />
-          {score !== null && (
-            <span style={{ fontSize: 12, fontWeight: 700, color: "#fff",
-                           background: score.total >= 70 ? "rgba(0,0,0,0.72)"
-                                      : score.total >= 40 ? "rgba(0,0,0,0.5)"
-                                      : "rgba(0,0,0,0.32)",
-                           borderRadius: 20, padding: "3px 10px",
-                           fontFamily: "var(--font-sans)" }}>
-              プランとの相性 {score.total}%
+          {/* エリア */}
+          {(item.prefecture || item.overseas) && (
+            <span style={{ fontSize: 12, fontWeight: 600, padding: "3px 10px",
+                           borderRadius: 20, fontFamily: "var(--font-sans)",
+                           background: "var(--color-primary-light)", color: "var(--color-primary)" }}>
+              {item.prefecture ? `📍 ${item.prefecture}` : `✈️ ${item.overseas}`}
             </span>
           )}
           {isEnriching && (
@@ -335,52 +330,66 @@ export const ItemDetailPage = () => {
               地図情報を取得中...
             </span>
           )}
-          {/* 写真なし時のハート（写真ありは写真上の右下に表示） */}
-          {!hasPhoto && (
-            <button onClick={() => toggleIsWant(item.itemId, item.isWant)}
-                    style={{ marginLeft: "auto", background: "none", border: "none",
-                             cursor: "pointer", display: "flex", flexDirection: "column",
-                             alignItems: "center", gap: 1 }}>
-              <span style={{ fontSize: 22, lineHeight: 1 }}>{item.isWant ? "❤️" : "🤍"}</span>
-              <span style={{ fontSize: 9, color: "var(--color-text-soft)", fontFamily: "var(--font-sans)" }}>
-                お気に入り
+          {/* 右寄せグループ: 写真なし時はハート・スコア、常に削除ボタン */}
+          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            {!hasPhoto && (
+              <button onClick={() => toggleIsWant(item.itemId, item.isWant)}
+                      style={{ background: "none", border: "none",
+                               cursor: "pointer", display: "flex", flexDirection: "column",
+                               alignItems: "center", gap: 1 }}>
+                <span style={{ fontSize: 22, lineHeight: 1 }}>{item.isWant ? "❤️" : "🤍"}</span>
+                <span style={{ fontSize: 9, color: "var(--color-text-soft)", fontFamily: "var(--font-sans)" }}>
+                  お気に入り
+                </span>
+              </button>
+            )}
+            {!hasPhoto && score !== null && (
+              <span style={{ fontSize: 10, fontWeight: 700, color: "#fff",
+                             background: "rgba(0,0,0,0.6)",
+                             borderRadius: 20, padding: "3px 9px",
+                             fontFamily: "var(--font-sans)" }}>
+                おすすめ度 {score.total}%
               </span>
+            )}
+            <button onClick={() => setShowDeleteConfirm(true)}
+                    style={{ background: "transparent",
+                             border: "1px solid rgba(200,50,50,0.35)",
+                             borderRadius: 8, cursor: "pointer",
+                             padding: "5px 12px", display: "flex", alignItems: "center", gap: 4,
+                             color: "#c0392b", fontFamily: "var(--font-sans)" }}>
+              <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+                <path d="M2 3.5h10M5.5 3.5V2.5h3v1M3.5 3.5l.5 8h6l.5-8" stroke="currentColor"
+                      strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              <span style={{ fontSize: 11 }}>削除</span>
             </button>
-          )}
+          </div>
         </div>
 
-        {/* Google マップ（全カテゴリ対象） */}
+        {/* 場所・マップ */}
         <div className="card p-4 mb-4">
-          {/* マップで見るリンク: Maps対象カテゴリ or URL登録済みの場合に表示 */}
-          {/* Google マップで見る + URL編集ボタン（横並び） */}
           {!editingUrl && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-              {(isPlaceCategory || item.userPlaceUrl) ? (
-                <a
-                  href={mapsUrl(item)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ textDecoration: "none", flex: 1, display: "flex", alignItems: "center", gap: 12 }}
-                >
-                  <span style={{ fontSize: 20, flexShrink: 0 }}>🗺️</span>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                    <span style={{ fontSize: 14, fontWeight: 600, color: "var(--color-primary)" }}>
-                      Googleマップで見る
-                    </span>
-                    {item.placeName && (
-                      <span style={{ fontSize: 11, color: "var(--color-text-soft)" }}>
-                        {item.placeName}
-                      </span>
-                    )}
-                  </div>
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0, marginLeft: 4 }}>
-                    <path d="M3 11L11 3M11 3H6M11 3V8" stroke="var(--color-primary)"
-                          strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </a>
-              ) : (
-                <span style={{ flex: 1 }} />
-              )}
+              <a
+                href={mapsUrl(item)}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ textDecoration: "none", flex: 1, display: "flex", alignItems: "center", gap: 12 }}
+              >
+                <span style={{ fontSize: 20, flexShrink: 0 }}>🗺️</span>
+                <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: "var(--color-primary)" }}>
+                    Googleマップで見る
+                  </span>
+                  <span style={{ fontSize: 11, color: "var(--color-text-soft)" }}>
+                    {item.placeName ?? (item.userPlaceUrl ? "登録済みURL" : "タイトルで検索")}
+                  </span>
+                </div>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0, marginLeft: 4 }}>
+                  <path d="M3 11L11 3M11 3H6M11 3V8" stroke="var(--color-primary)"
+                        strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </a>
               <button
                 onClick={() => { setUrlDraft(item.userPlaceUrl ?? ""); setEditingUrl(true); }}
                 style={{ fontSize: 12, color: item.userPlaceUrl ? "var(--color-primary)" : "var(--color-text-soft)",
@@ -563,14 +572,16 @@ export const ItemDetailPage = () => {
                   写真{photos.length > 0 && <span style={{ fontWeight: 400, fontSize: 11, color: "var(--color-text-soft)", marginLeft: 6 }}>{photos.length}/{MAX_PHOTOS}</span>}
                 </p>
                 {canAdd && (
-                  <label style={{ cursor: photo.photoUploading ? "default" : "pointer" }}>
+                  <label style={{ cursor: photo.photoUploading ? "default" : "pointer",
+                                  display: "inline-flex", alignItems: "center", gap: 4,
+                                  padding: "5px 12px", borderRadius: 8, fontSize: 13, fontWeight: 600,
+                                  border: `1px solid ${photo.photoUploading ? "var(--color-border)" : "var(--color-primary)"}`,
+                                  color: photo.photoUploading ? "var(--color-text-soft)" : "var(--color-primary)",
+                                  background: "transparent" }}>
                     <input type="file" accept="image/jpeg,image/png,image/gif,image/webp"
                            style={{ display: "none" }}
                            onChange={photo.handlePhotoUpload} disabled={photo.photoUploading} />
-                    <span style={{ fontSize: 12, fontWeight: 600,
-                                   color: photo.photoUploading ? "var(--color-text-soft)" : "var(--color-primary)" }}>
-                      {photo.photoUploading ? "アップロード中..." : "+ 追加"}
-                    </span>
+                    {photo.photoUploading ? "アップロード中..." : "＋ 追加"}
                   </label>
                 )}
               </div>
@@ -628,16 +639,6 @@ export const ItemDetailPage = () => {
           );
         })()}
 
-        {/* アイテム削除 */}
-        <div style={{ borderTop: "1px solid var(--color-border)", margin: "24px 0 0", paddingTop: 16 }}>
-          <button
-            onClick={() => setShowDeleteConfirm(true)}
-            className="text-sm text-center w-full"
-            style={{ color: "var(--color-text-soft)" }}
-          >
-            このアイテムを削除する
-          </button>
-        </div>
       </div>
       </div>{/* /スクロールエリア */}
 

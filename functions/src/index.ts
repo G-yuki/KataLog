@@ -214,37 +214,33 @@ export const generateMemory = onCall(
 
     const prompt = `以下のログデータをもとに、指定フォーマット通りに出力してください。
 
+【対象期間】${periodLabel}（この期間の体験のみを使って出力すること。期間は変えないこと）
+
 【完了した体験（時系列順）】
 ${itemList}
 ${todoList ? `\n【今後の予定（参考・おすすめプラン選定に使うこと）】\n${todoList}\n` : ""}
 【出力フォーマット】
 
-▶ 期間
-${periodLabel}
-
-▶ ひとことコピー
+▶ テーマ
 体験全体を表す短いコピーを1文で（例：「動き続けた春。」）
 
 ▶ ハイライト
-最も評価が高かった体験を2〜3つ、以下の形式で：
-1.【体験名】（[月]）★[評価]
-　"[メモをもとにした一言エピソード]"
+最も印象的な体験のエピソードを2〜3つ、以下の形式で：
+・"[メモや評価をもとにした一言エピソード]"
 
-▶ 流れ
-時系列で体験を以下の番号リスト形式で：
-1. [絵文字]【体験名】（月）
-2. [絵文字]【体験名】（月）
+▶ 軌跡
+時系列で体験を以下の形式で：
+・[絵文字]【体験名】（月）
 （全体験を列挙すること）
 
-▶ 次のおすすめプラン
+▶ 次のおすすめ体験
 今後の予定から2〜3つ選び、以下の形式で：
-1.【体験名】（カテゴリ）
+・【体験名】
 理由：[ふたりの好みや過去の体験をふまえた理由を1〜2文で]
 
 【ルール】
 - 全体で300〜400文字程度
 - 体験がない月はスキップする
-- メモがない体験は評価だけで描写する
 - 感情的・詩的な表現を意識する
 - 「ふたり」という言葉を軸に書く
 - フォーマット通りに出力する。それ以外は何も書かない
@@ -334,8 +330,9 @@ export const enrichItem = onCall(
       console.warn("enrichItem Step1 failed, marking as no-place to stop retry:", e);
     }
 
-    // Step 2: Place Details Photos（Enterprise tier — place 発見時のみ）
+    // Step 2: Place Details Photos + Rating（Enterprise tier — place 発見時のみ）
     let placePhotoRef: string | null = null;
+    let placeRating: number | null = null;
     if (place?.id) {
       try {
         const detailRes = await fetch(
@@ -343,12 +340,13 @@ export const enrichItem = onCall(
           {
             headers: {
               "X-Goog-Api-Key": mapsServerKey.value(),
-              "X-Goog-FieldMask": "photos",
+              "X-Goog-FieldMask": "photos,rating",
             },
           }
         );
         if (!detailRes.ok) throw new Error(`Place Details HTTP ${detailRes.status}`);
-        const detailData = await detailRes.json() as { photos?: Array<{ name: string }> };
+        const detailData = await detailRes.json() as { photos?: Array<{ name: string }>; rating?: number };
+        placeRating = detailData.rating ?? null;
         const photoName = detailData.photos?.[0]?.name ?? null;
 
         if (photoName) {
@@ -386,6 +384,7 @@ export const enrichItem = onCall(
       .update({
         placeId:      place?.id ?? "",
         placePhotoRef,
+        placeRating,
         lat:          place?.location?.latitude ?? null,
         lng:          place?.location?.longitude ?? null,
         placeTypes:   place?.types ?? null,

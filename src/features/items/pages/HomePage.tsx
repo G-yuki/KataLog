@@ -20,7 +20,9 @@ import type { Item, Category, ItemType, ItemStatus, Hearing } from "../../../typ
 export const HomePage = () => {
   const navigate = useNavigate();
   const { pairId, loading: pairLoading } = usePair();
-  const [pairNames, setPairNames] = useState("");
+  const [pairNames, setPairNames] = useState(() =>
+    pairId ? (sessionStorage.getItem(`pairNames_${pairId}`) ?? "") : ""
+  );
   const { items, loading } = useItems(pairId);
 
   const [selectedCategories, setSelectedCategories] = useState<Category[]>([]);
@@ -182,7 +184,9 @@ export const HomePage = () => {
       const names = await Promise.all(members.map((uid) => getDisplayName(uid)));
       const validNames = names.filter(Boolean) as string[];
       if (validNames.length > 0) {
-        setPairNames(validNames.join(" & "));
+        const joined = validNames.join(" & ");
+        setPairNames(joined);
+        sessionStorage.setItem(`pairNames_${pairId}`, joined);
       }
     })();
   }, [pairId, pairLoading, navigate]);
@@ -229,12 +233,6 @@ export const HomePage = () => {
                          color: "var(--color-text-main)", letterSpacing: "0.01em" }}>
               ホーム
             </h1>
-            {pairNames && (
-              <p style={{ fontSize: 11, color: "var(--color-text-mid)", marginTop: 3,
-                          fontFamily: "var(--font-sans)", letterSpacing: "0.04em" }}>
-                {pairNames}
-              </p>
-            )}
           </div>
           <img src="/logo.png" alt="KataLog" style={{ height: 20, objectFit: "contain" }} />
         </div>
@@ -499,10 +497,10 @@ export const HomePage = () => {
               onClick={() => setShowAddModal(true)}
               style={{ position: "fixed", bottom: 88, right: 16, zIndex: 30,
                        height: 44, borderRadius: 22, padding: "0 20px",
-                       background: "var(--color-primary)", color: "#fff",
-                       border: "none",
+                       background: "#fff", color: "#222",
+                       border: "1.5px solid var(--color-accent)",
                        fontSize: 13, fontWeight: 600, cursor: "pointer",
-                       boxShadow: "0 4px 16px rgba(139, 90, 43, 0.3)",
+                       boxShadow: "0 4px 14px rgba(201,169,110,0.25)",
                        display: "flex", alignItems: "center", justifyContent: "center",
                        gap: 6, fontFamily: "var(--font-sans)" }}>
         <span style={{ fontSize: 18, lineHeight: 1 }}>＋</span>
@@ -539,18 +537,21 @@ export const HomePage = () => {
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
                       display: "flex", alignItems: "flex-end", zIndex: 100 }}
              onClick={closeAddModal}>
-          <div ref={modalContentRef}
-               onTouchStart={handleModalTouchStart}
-               onTouchEnd={handleModalTouchEnd}
-               onClick={(e) => e.stopPropagation()}
+          <div onClick={(e) => e.stopPropagation()}
                style={{ width: "100%", background: "var(--color-bg)", borderRadius: "20px 20px 0 0",
-                        padding: "12px 20px 48px", display: "flex", flexDirection: "column", gap: 16,
-                        maxHeight: "90dvh", overflowY: "auto", scrollbarWidth: "none" }}>
-            {/* ドラッグインジケーター */}
-            <div style={{ display: "flex", justifyContent: "center", paddingBottom: 4 }}>
+                        display: "flex", flexDirection: "column", maxHeight: "90dvh" }}>
+            {/* ドラッグハンドル（スワイプ判定はここだけ） */}
+            <div onTouchStart={handleModalTouchStart}
+                 onTouchEnd={handleModalTouchEnd}
+                 style={{ display: "flex", justifyContent: "center", padding: "12px 20px 8px",
+                          flexShrink: 0, touchAction: "none" }}>
               <div style={{ width: 36, height: 4, borderRadius: 2,
                             background: "rgba(0,0,0,0.15)" }} />
             </div>
+            {/* スクロール可能なコンテンツ */}
+            <div ref={modalContentRef}
+                 style={{ flex: 1, overflowY: "auto", scrollbarWidth: "none",
+                          padding: "0 20px 48px", display: "flex", flexDirection: "column", gap: 16 }}>
 
             {/* タイトル */}
             <div>
@@ -736,9 +737,10 @@ export const HomePage = () => {
                              background: newTitle.trim() ? "var(--color-primary)" : "rgba(0,0,0,0.1)",
                              color: newTitle.trim() ? "#fff" : "var(--color-text-soft)",
                              fontFamily: "var(--font-sans)" }}>
-              {addSaving ? "追加中..." : "リストに追加する"}
+              {addSaving ? "追加中..." : "追加する"}
             </button>
-          </div>
+            </div>{/* /スクロールエリア */}
+          </div>{/* /モーダル */}
         </div>
       )}
 
@@ -767,6 +769,12 @@ const SectionLabel = ({ children, style }: { children: React.ReactNode; style?: 
 const ScoreBreakdownModal = ({ item, bd, onClose }: {
   item: Item; bd: ScoreBreakdown; onClose: () => void;
 }) => {
+  useEffect(() => {
+    const handlePop = () => onClose();
+    window.addEventListener("popstate", handlePop);
+    return () => window.removeEventListener("popstate", handlePop);
+  }, [onClose]);
+
   const hasArea = !!(item.prefecture || item.overseas);
   const rows: { label: string; pts: number; na: boolean; icon: string }[] = [
     { label: "カテゴリ一致",  pts: bd.genres,    na: false,                         icon: bd.genres > 0    ? "✓" : "✗" },
@@ -817,8 +825,9 @@ const ScoreBreakdownModal = ({ item, bd, onClose }: {
           ))}
         </div>
         <p style={{ fontSize: 11, color: "var(--color-text-soft)", marginTop: 14, textAlign: "center",
-                    fontFamily: "var(--font-sans)" }}>
-          ヒアリング設定との照合スコアです。プランを更新すると変わります。
+                    fontFamily: "var(--font-sans)", lineHeight: 1.8 }}>
+          プラン設定との照合スコアです。<br />
+          プランを更新すると変わります。
         </p>
       </div>
     </div>

@@ -298,7 +298,7 @@ export const MemoryPage = () => {
 
         {/* サブタブ */}
         <div style={{ display: "flex", gap: 0 }}>
-          {([["generate", "思い出"], ["archive", "記録"]] as const).map(([tab, label]) => (
+          {([["generate", "思い出"], ["archive", "アルバム"]] as const).map(([tab, label]) => (
             <button key={tab} onClick={() => setSubTab(tab)}
                     style={{ padding: "10px 20px", fontSize: 13, fontWeight: subTab === tab ? 600 : 400,
                              color: subTab === tab ? "var(--color-primary)" : "var(--color-text-mid)",
@@ -530,7 +530,7 @@ export const MemoryPage = () => {
                                        border: "none", borderRadius: 14, fontSize: 15, fontWeight: 600,
                                        cursor: generating ? "default" : "pointer",
                                        fontFamily: "var(--font-sans)", transition: "background 0.2s" }}>
-                        {generating ? "かたちに変換中…" : "記録（かたち）に変換する"}
+                        {generating ? "生成中…" : "思い出を振り返る"}
                       </button>
                     </div>
                   )}
@@ -548,7 +548,7 @@ export const MemoryPage = () => {
                           <div style={{ height: 1, flex: 1, background: "var(--color-border)" }} />
                           <p style={{ fontSize: 10, color: "var(--color-accent)", letterSpacing: "0.12em",
                                       fontFamily: "var(--font-sans)", fontWeight: 500 }}>
-                            ふたりの記録
+                            ふたりの思い出
                           </p>
                           <div style={{ height: 1, flex: 1, background: "var(--color-border)" }} />
                         </div>
@@ -695,7 +695,7 @@ export const MemoryPage = () => {
                 記録された思い出はありません
               </p>
               <p style={{ fontSize: 13, color: "var(--color-text-mid)", lineHeight: 1.7 }}>
-                「思い出」タブで記録（かたち）に変換し、<br />「保存する」で記録に残しましょう。
+                「思い出」タブで思い出を振り返り、<br />「保存する」でアルバムに残しましょう。
               </p>
               <button onClick={() => setSubTab("generate")}
                       style={{ marginTop: 20, padding: "12px 28px",

@@ -42,16 +42,17 @@ export const SettingsPage = () => {
         pairId ? getDoc(doc(db, "pairs", pairId)) : Promise.resolve(null),
       ]);
       setNickname(name ?? "");
-      setLoading(false); // ← パートナー名を待たず即座に画面表示
 
-      // パートナー名はバックグラウンドで取得（表示は後から差し込まれる）
       if (pairSnap?.exists()) {
         const members = pairSnap.data().members as string[];
         const partnerUid = members.find((m) => m !== user.uid);
         if (partnerUid) {
-          getDisplayName(partnerUid).then((pname) => setPartnerName(pname));
+          const pname = await getDisplayName(partnerUid);
+          setPartnerName(pname);
         }
       }
+
+      setLoading(false);
     })();
   }, [user, pairId, pairLoading]);
 

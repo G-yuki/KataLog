@@ -18,12 +18,15 @@ export const AuthGuard = ({ children }: Props) => {
   );
   const hasInvite = getInviteParams() !== null;
 
+  // 前回ログイン済みの場合はスピナーなしでスプラッシュのみ表示（UX高速化）
+  const mightBeLoggedIn = !!localStorage.getItem("katalog_uid");
+
   if (loading) return (
     <div style={{ position: "fixed", inset: 0, display: "flex", flexDirection: "column",
-                  alignItems: "center", justifyContent: "center", gap: 20,
+                  alignItems: "center", justifyContent: "center",
                   background: "var(--color-bg)" }}>
       <img src="/logo.png" alt="KataLog" style={{ height: 32, opacity: 0.9 }} />
-      <Loading message="認証情報を確認中..." />
+      {!mightBeLoggedIn && <Loading message="認証情報を確認中..." />}
     </div>
   );
 

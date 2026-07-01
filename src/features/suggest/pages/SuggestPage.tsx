@@ -7,8 +7,10 @@ import { useGenerateItems } from "../../setup/hooks/useGenerateItems";
 import { addSuggestedItems } from "../../items/services/itemService";
 import { useItems } from "../../items/hooks/useItems";
 import { usePair } from "../../../contexts/PairContext";
+import { useAuth } from "../../auth/hooks/useAuth";
 import { db } from "../../../firebase/firestore";
 import { doc, getDoc, updateDoc, deleteField, serverTimestamp } from "firebase/firestore";
+import { getDisplayName } from "../../pair/services/pairService";
 import {
   GENRES, CATEGORY_STYLE,
   RANGE_OPTIONS, CHILDREN_OPTIONS, TRANSPORT_OPTIONS, BUDGET_OPTIONS, INDOOR_OPTIONS,
@@ -33,10 +35,13 @@ export const SuggestPage = () => {
   const [genError, setGenError] = useState<string | null>(null);
 
   const { pairId, loading: pairLoading } = usePair();
+  const { user } = useAuth();
   const { items: existingItems } = useItems(pairId);
   const [step, setStep] = useState<Step>("home");
   const [showIntro, setShowIntro] = useState(() => !localStorage.getItem("askAiIntroSeen"));
   const [hearing, setHearing] = useState<Hearing | null>(null);
+  const [myName, setMyName] = useState<string | null>(null);
+  const [partnerName, setPartnerName] = useState<string | null>(null);
   const [editHearing, setEditHearing] = useState<Partial<Hearing>>({});
   const [suggestions, setSuggestions] = useState<ItemDraft[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -47,6 +52,7 @@ export const SuggestPage = () => {
   useEffect(() => {
     if (pairLoading) return;
     if (!pairId) { navigate("/"); return; }
+    if (!user) return;
     (async () => {
       const snap = await getDoc(doc(db, "pairs", pairId));
       if (snap.exists()) {
@@ -55,10 +61,20 @@ export const SuggestPage = () => {
         if (h) setHearing(h);
         const pending = data.pendingSuggestions as ItemDraft[] | undefined;
         if (pending && pending.length > 0) setSuggestions(pending);
+        if (user) {
+          const members = data.members as string[] | undefined ?? [];
+          const partnerUid = members.find((m) => m !== user.uid);
+          const [me, partner] = await Promise.all([
+            getDisplayName(user.uid),
+            partnerUid ? getDisplayName(partnerUid) : Promise.resolve(null),
+          ]);
+          setMyName(me);
+          setPartnerName(partner);
+        }
       }
       setInitLoading(false);
     })();
-  }, [pairId, pairLoading, navigate]);
+  }, [pairId, pairLoading, navigate, user]);
 
   const handleGenerate = async (overrideHearing?: Partial<Hearing>) => {
     const base = overrideHearing ?? hearing;
@@ -158,7 +174,10 @@ export const SuggestPage = () => {
               </div>
               <p style={{ fontSize: 15, fontWeight: 500, color: "var(--color-text-main)",
                           lineHeight: 1.6 }}>
-                AIがふたりにぴったりの<br />体験を新たに提案します
+                {myName != null && partnerName != null
+                  ? <>{myName}さんと{partnerName}さんに<br />ぴったりな体験を<br />新たに見つけましょう！</>
+                  : <>ふたりにぴったりな体験を<br />新たに見つけましょう！</>
+                }
               </p>
             </div>
 
@@ -218,7 +237,7 @@ export const SuggestPage = () => {
                          color: "#fff", border: "none", borderRadius: 14, fontSize: 15,
                          fontWeight: 600, cursor: hearing ? "pointer" : "default",
                          opacity: hearing ? 1 : 0.4, fontFamily: "var(--font-sans)" }}>
-                ✦ AIに提案してもらう
+                おすすめ体験をさがす
               </button>
               {suggestions.length > 0 && (
                 <button
@@ -234,7 +253,7 @@ export const SuggestPage = () => {
                 onClick={() => { setEditHearing({ ...hearing }); setStep("update-hearing"); }}
                 style={{ width: "100%", padding: "16px", background: "#fff",
                          color: "var(--color-text-mid)", border: "1px solid var(--color-border)",
-                         borderRadius: 14, fontSize: 14, cursor: "pointer",
+                         borderRadius: 14, fontSize: 15, fontWeight: 600, cursor: "pointer",
                          fontFamily: "var(--font-sans)" }}>
                 プランを更新
               </button>
