@@ -60,20 +60,15 @@ export const IntroSlides = ({ onDone }: { onDone: () => void }) => {
         スキップ
       </button>
 
-      {/* ロゴ */}
-      <div style={{ position: "absolute", top: 160, left: 0, right: 0,
-                    display: "flex", justifyContent: "center" }}>
-        <img src="/logo.png" alt="KataLog" style={{ height: 40, opacity: 0.9 }} />
-      </div>
-
-      {/* コンテンツ（paddingTopでロゴ分のスペースを確保し、文章位置を維持） */}
+      {/* コンテンツ（ロゴ＋テキストを縦並びで中央配置） */}
       <div
         style={{
           flex: 1, display: "flex", flexDirection: "column",
           alignItems: "center", justifyContent: "center",
-          padding: "160px 36px 0", gap: 24, textAlign: "center",
+          padding: "40px 36px 0", gap: 20, textAlign: "center",
         }}
       >
+        <img src="/logo.png" alt="KataLog" style={{ height: 44, opacity: 0.9, marginBottom: 4 }} />
         <h2
           style={{
             fontFamily: "var(--font-serif)", fontSize: 18, fontWeight: 600,

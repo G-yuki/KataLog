@@ -1,5 +1,5 @@
 // src/features/items/pages/HomePage.tsx
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useItems } from "../hooks/useItems";
 import { Loading } from "../../../components/Loading";
@@ -43,8 +43,8 @@ export const HomePage = () => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const restoredRef = useRef(false);
 
-  // 詳細から戻った際に状態を復元
-  useEffect(() => {
+  // 詳細から戻った際に状態を復元（useLayoutEffect でペイント前に適用しちらつきを防ぐ）
+  useLayoutEffect(() => {
     if (!pairId || loading || restoredRef.current) return;
     restoredRef.current = true;
     try {
@@ -545,7 +545,7 @@ export const HomePage = () => {
             </div>
             {/* スクロール可能なコンテンツ */}
             <div ref={modalContentRef}
-                 style={{ flex: 1, overflowY: "auto", scrollbarWidth: "none",
+                 style={{ flex: 1, minHeight: 0, overflowY: "auto", scrollbarWidth: "none",
                           padding: "0 20px 48px", display: "flex", flexDirection: "column", gap: 16 }}>
 
             {/* タイトル */}

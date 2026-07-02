@@ -25,7 +25,7 @@ export const AuthGuard = ({ children }: Props) => {
     <div style={{ position: "fixed", inset: 0, display: "flex", flexDirection: "column",
                   alignItems: "center", justifyContent: "center",
                   background: "var(--color-bg)" }}>
-      <img src="/logo.png" alt="KataLog" style={{ height: 32, opacity: 0.9 }} />
+      <img src="/logo.png" alt="KataLog" style={{ height: 60, opacity: 0.9 }} />
       {!mightBeLoggedIn && <Loading message="認証情報を確認中..." />}
     </div>
   );

@@ -1,5 +1,5 @@
 // src/features/suggest/pages/SuggestPage.tsx
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loading } from "../../../components/Loading";
 import { BottomNav } from "../../../components/BottomNav";
@@ -38,6 +38,22 @@ export const SuggestPage = () => {
   const { user } = useAuth();
   const { items: existingItems } = useItems(pairId);
   const [step, setStep] = useState<Step>("home");
+  const stepRef = useRef<Step>("home");
+  stepRef.current = step;
+
+  useEffect(() => {
+    window.history.pushState({ suggest: true }, "");
+    const handlePop = () => {
+      if (stepRef.current !== "home") {
+        setStep("home");
+        window.history.pushState({ suggest: true }, "");
+      } else {
+        navigate("/home");
+      }
+    };
+    window.addEventListener("popstate", handlePop);
+    return () => window.removeEventListener("popstate", handlePop);
+  }, [navigate]);
   const [showIntro, setShowIntro] = useState(() => !localStorage.getItem("askAiIntroSeen"));
   const [hearing, setHearing] = useState<Hearing | null>(null);
   const [myName, setMyName] = useState<string | null>(null);
