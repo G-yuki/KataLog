@@ -17,19 +17,45 @@ import type { ScoreBreakdown } from "../../../lib/scoring";
 import { heroUrl } from "../../../lib/item";
 import type { Item, Category, ItemType, ItemStatus, Hearing } from "../../../types";
 
+// sessionStorage から home_state を同期読み込み（pairId 不要の先頭一致サーチ）
+function readCachedHomeState(): {
+  sortOrder?: "score" | "createdAt";
+  selectedCategories?: Category[];
+  doneOpen?: boolean;
+  hearing?: Hearing | null;
+} {
+  try {
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const key = sessionStorage.key(i);
+      if (key?.startsWith("home_state_")) {
+        return JSON.parse(sessionStorage.getItem(key) ?? "{}");
+      }
+    }
+  } catch { /* ignore */ }
+  return {};
+}
+
 export const HomePage = () => {
   const navigate = useNavigate();
   const { pairId, loading: pairLoading } = usePair();
   const { items, loading } = useItems(pairId);
 
-  const [selectedCategories, setSelectedCategories] = useState<Category[]>([]);
-  const [sortOrder, setSortOrder] = useState<"score" | "createdAt">("createdAt");
+  const [selectedCategories, setSelectedCategories] = useState<Category[]>(
+    () => readCachedHomeState().selectedCategories ?? []
+  );
+  const [sortOrder, setSortOrder] = useState<"score" | "createdAt">(
+    () => readCachedHomeState().sortOrder ?? "createdAt"
+  );
   const [catOpen, setCatOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
-  const [hearing, setHearing] = useState<Hearing | null>(null);
+  const [hearing, setHearing] = useState<Hearing | null>(
+    () => readCachedHomeState().hearing ?? null
+  );
   const [breakdownItem, setBreakdownItem] = useState<{ item: Item; bd: ScoreBreakdown } | null>(null);
   const [search, setSearch] = useState("");
-  const [doneOpen, setDoneOpen] = useState(false);
+  const [doneOpen, setDoneOpen] = useState<boolean>(
+    () => readCachedHomeState().doneOpen ?? false
+  );
   const [showGuide, setShowGuide] = useState(() => !localStorage.getItem("homeGuideSeen"));
   const [guideDetailOpen, setGuideDetailOpen] = useState(false);
 
@@ -43,41 +69,36 @@ export const HomePage = () => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const restoredRef = useRef(false);
 
-  // 詳細から戻った際に状態を復元（useLayoutEffect でペイント前に適用しちらつきを防ぐ）
+  // 詳細から戻った際のスクロール位置復元（sortOrder 等は eager init 済みのためここでは不要）
   useLayoutEffect(() => {
     if (!pairId || loading || restoredRef.current) return;
     restoredRef.current = true;
     try {
       const saved = sessionStorage.getItem(`home_state_${pairId}`);
       if (!saved) return;
-      const { selectedCategories: cats, sortOrder: sort, doneOpen: d, scrollTop: s } = JSON.parse(saved) as {
-        selectedCategories: Category[]; sortOrder: "score" | "createdAt"; doneOpen: boolean; scrollTop: number;
-      };
-      if (cats) setSelectedCategories(cats);
-      if (sort) setSortOrder(sort);
-      setDoneOpen(d);
+      const { scrollTop: s } = JSON.parse(saved) as { scrollTop: number };
       requestAnimationFrame(() => {
         if (scrollRef.current) scrollRef.current.scrollTop = s ?? 0;
       });
     } catch { /* ignore */ }
   }, [pairId, loading]);
 
-  // フィルター・ソート変更時に自動保存（ページ切り替え後も復元できるように）
+  // フィルター・ソート・hearing 変更時に自動保存
   useEffect(() => {
     if (!pairId || !restoredRef.current) return;
     try {
       sessionStorage.setItem(`home_state_${pairId}`, JSON.stringify({
-        selectedCategories, sortOrder, doneOpen,
+        selectedCategories, sortOrder, doneOpen, hearing,
         scrollTop: scrollRef.current?.scrollTop ?? 0,
       }));
     } catch { /* ignore */ }
-  }, [sortOrder, selectedCategories, doneOpen, pairId]);
+  }, [sortOrder, selectedCategories, doneOpen, hearing, pairId]);
 
   const navigateToDetail = (itemId: string) => {
     if (pairId) {
       try {
         sessionStorage.setItem(`home_state_${pairId}`, JSON.stringify({
-          selectedCategories, sortOrder, doneOpen,
+          selectedCategories, sortOrder, doneOpen, hearing,
           scrollTop: scrollRef.current?.scrollTop ?? 0,
         }));
       } catch { /* ignore */ }
@@ -534,7 +555,8 @@ export const HomePage = () => {
              onClick={closeAddModal}>
           <div onClick={(e) => e.stopPropagation()}
                style={{ width: "100%", background: "var(--color-bg)", borderRadius: "20px 20px 0 0",
-                        display: "flex", flexDirection: "column", maxHeight: "90dvh" }}>
+                        display: "flex", flexDirection: "column", maxHeight: "90dvh",
+                        overflow: "hidden" }}>
             {/* ドラッグハンドル（スワイプ判定はここだけ） */}
             <div onTouchStart={handleModalTouchStart}
                  onTouchEnd={handleModalTouchEnd}
@@ -545,7 +567,7 @@ export const HomePage = () => {
             </div>
             {/* スクロール可能なコンテンツ */}
             <div ref={modalContentRef}
-                 style={{ flex: 1, minHeight: 0, overflowY: "auto", scrollbarWidth: "none",
+                 style={{ overflowY: "auto", overscrollBehavior: "contain", scrollbarWidth: "none",
                           padding: "0 20px 48px", display: "flex", flexDirection: "column", gap: 16 }}>
 
             {/* タイトル */}

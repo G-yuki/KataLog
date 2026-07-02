@@ -42,13 +42,14 @@ export const SuggestPage = () => {
   stepRef.current = step;
 
   useEffect(() => {
-    window.history.pushState({ suggest: true }, "");
+    // React Router v6 が history.state に内部状態を持つため、既存 state を保持して追記する
+    window.history.pushState({ ...window.history.state, _suggest: true }, "");
     const handlePop = () => {
       if (stepRef.current !== "home") {
         setStep("home");
-        window.history.pushState({ suggest: true }, "");
+        window.history.pushState({ ...window.history.state, _suggest: true }, "");
       } else {
-        navigate("/home");
+        navigate("/home", { replace: true });
       }
     };
     window.addEventListener("popstate", handlePop);
