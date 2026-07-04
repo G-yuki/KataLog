@@ -285,7 +285,7 @@ export const PairSetupPage = () => {
         パートナーの参加を<br />お待ちください
       </h2>
       <p style={{ fontSize: 14, color: "var(--color-text-mid)", lineHeight: 1.8, maxWidth: 280 }}>
-        招待リンクを送ったら、パートナーが参加するまでしばらくお待ちください。<br />
+        招待リンクを送ったら、<br />パートナーが参加するまでしばらくお待ちください。<br />
         参加すると自動で次のステップへ進みます。
       </p>
       <div className="flex gap-2">
@@ -318,9 +318,8 @@ export const PairSetupPage = () => {
         <>
           <p className="text-sm text-center leading-relaxed"
              style={{ color: "var(--color-text-mid)" }}>
-            ペアを作成して招待リンクをパートナーに送るか、<br />
-            受け取ったリンクからここに来た場合は<br />
-            パートナーにペアを作成してもらってください。
+            ペアを作成して、招待リンクを<br />
+            パートナーに送りましょう。
           </p>
           {pairError && <p className="auth-error">{pairError}</p>}
           <button

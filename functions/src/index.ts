@@ -1,6 +1,6 @@
 import { setGlobalOptions } from "firebase-functions";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
-import { onDocumentDeleted } from "firebase-functions/v2/firestore";
+import { onDocumentDeleted, onDocumentUpdated } from "firebase-functions/v2/firestore";
 import { defineSecret } from "firebase-functions/params";
 import { GoogleGenerativeAI, SchemaType, type Schema } from "@google/generative-ai";
 import * as admin from "firebase-admin";
@@ -402,6 +402,90 @@ export const enrichItem = onCall(
       });
 
     return { ok: true };
+  }
+);
+
+// ── スワイプ完了トリガー（両者完了でマッチング実行） ─────────────────────
+export const onPairSwipesComplete = onDocumentUpdated(
+  { document: "pairs/{pairId}", region: "asia-northeast1" },
+  async (event) => {
+    const before = event.data?.before.data();
+    const after  = event.data?.after.data();
+    if (!before || !after) return;
+
+    // 今回の更新で初めて両者が揃い、かつ未確定の場合のみ実行
+    const bothNow    = after.creatorSwipesDone  && after.partnerSwipesDone;
+    const bothBefore = before.creatorSwipesDone && before.partnerSwipesDone;
+    if (!bothNow || bothBefore || after.matchingFinalized) return;
+
+    const pairId = event.params.pairId;
+    const db     = admin.firestore();
+    const pairRef = db.doc(`pairs/${pairId}`);
+
+    // Transaction で matchingFinalized を先にセット（二重実行防止）
+    const shouldRun = await db.runTransaction(async (t) => {
+      const snap = await t.get(pairRef);
+      if (!snap.exists || snap.data()?.matchingFinalized) return false;
+      t.update(pairRef, {
+        matchingFinalized: true,
+        matchingFinalizedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      return true;
+    });
+    if (!shouldRun) return;
+
+    const pendingSnap = await db.collection(`pairs/${pairId}/pendingItems`).get();
+    const batch = db.batch();
+
+    pendingSnap.docs.forEach((d) => {
+      const data = d.data();
+      const cs: string | null = data.creatorSwipe ?? null;
+      const ps: string | null = data.partnerSwipe ?? null;
+
+      if (!cs || !ps || (cs === "pass" && ps === "pass")) {
+        batch.delete(d.ref);
+        return;
+      }
+
+      let matchTier: "go" | "good" | "try";
+      if (cs === "pass" || ps === "pass") {
+        matchTier = "try";
+      } else if (cs === "go" && ps === "go") {
+        matchTier = "go";
+      } else {
+        matchTier = "good";
+      }
+
+      const itemRef = db.collection(`pairs/${pairId}/items`).doc();
+      batch.set(itemRef, {
+        title:        data.title,
+        category:     data.category,
+        type:         data.type,
+        difficulty:   data.difficulty,
+        status:       "todo",
+        isWant:       matchTier === "go",
+        matchTier,
+        rating:       null,
+        memo:         null,
+        completedAt:  null,
+        ...(matchTier === "try" && {
+          expireAt: new admin.firestore.Timestamp(
+            Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60, 0
+          ),
+        }),
+        ...(data.overseas   ? { overseas: data.overseas }    : {}),
+        ...(data.prefecture ? { prefecture: data.prefecture } : {}),
+        placeId:      null,
+        placeName:    null,
+        placeRating:  null,
+        placePhotoRef: null,
+        createdAt:    admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      batch.delete(d.ref);
+    });
+
+    await batch.commit();
   }
 );
 

@@ -174,6 +174,38 @@ export const addManualItem = async (
   });
 };
 
+// ── Plan Approval（ヒアリング確認フロー） ─────────────────────────────
+
+/** パートナーが確認したfinalHearingを保存 */
+export const saveFinalHearing = async (
+  pairId: string,
+  finalHearing: import("../../../types").Hearing
+): Promise<void> => {
+  await updateDoc(doc(db, "pairs", pairId), {
+    finalHearing,
+    partnerHearingConfirmed: true,
+    creatorPlanApproved: false,
+    partnerPlanApproved: false,
+  });
+};
+
+/** プラン承認フラグをatomicにセット。両者揃えばtrueを返す */
+export const markPlanApproved = async (
+  pairId: string,
+  role: "creator" | "partner"
+): Promise<boolean> => {
+  const myFlag    = role === "creator" ? "creatorPlanApproved" : "partnerPlanApproved";
+  const otherFlag = role === "creator" ? "partnerPlanApproved" : "creatorPlanApproved";
+
+  return runTransaction(db, async (t) => {
+    const pairRef = doc(db, "pairs", pairId);
+    const snap = await t.get(pairRef);
+    const data = snap.data() ?? {};
+    t.update(pairRef, { [myFlag]: true });
+    return data[otherFlag] === true;
+  });
+};
+
 // ── Pending Items（同時スワイプフロー） ────────────────────────────
 
 /**

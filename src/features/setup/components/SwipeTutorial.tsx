@@ -20,17 +20,22 @@ export const SwipeTutorial = ({ onClose, isPartner = false }: Props) => (
       {isPartner && (
         <p style={{ fontSize: 12, color: "var(--color-primary)", textAlign: "center",
                     marginBottom: 14, fontWeight: 500 }}>
-          ふたりの回答を組み合わせてリストが作られます！
+          ヒアリング結果をもとにリストが作られます！
         </p>
       )}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 12, margin: "16px 0 20px" }}>
+      <p style={{ fontSize: 11, color: "var(--color-text-soft)", textAlign: "center",
+                  marginBottom: 12 }}>
+        ボタンまたはスワイプで操作できます
+      </p>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 12, margin: "0 0 20px" }}>
         <Row icon="⇧" label="興味アリ" color="#f43f5e"
-             desc="ぜひやってみたい！（リストに必ず追加）" />
+             desc="ぜひやってみたい！（リストに必ず追加）　上スワイプ or ボタン" />
         <Row icon="⇨" label="あとで" color="var(--color-primary)"
-             desc="気になるけど、今すぐじゃなくてもOK" />
+             desc="気になるけど、今すぐじゃなくてもOK　右スワイプ or ボタン" />
         <Row icon="⇦" label="興味なし" color="var(--color-text-soft)"
-             desc="今回はスキップ" />
+             desc="今回はスキップ　左スワイプ or ボタン" />
       </div>
 
       <button onClick={onClose}

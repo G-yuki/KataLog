@@ -1,10 +1,12 @@
-// src/features/setup/pages/HearingPage.tsx
-import { useState } from "react";
+// src/features/setup/pages/PartnerHearingConfirmPage.tsx
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/hooks/useAuth";
 import { getUserPairId } from "../../pair/services/pairService";
+import { saveFinalHearing } from "../../items/services/itemService";
 import { db } from "../../../firebase/firestore";
-import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
+import { Loading } from "../../../components/Loading";
 import {
   GENRES, PREFECTURES,
   RANGE_OPTIONS, CHILDREN_OPTIONS, TRANSPORT_OPTIONS, BUDGET_OPTIONS, INDOOR_OPTIONS,
@@ -12,37 +14,64 @@ import {
 } from "../../../lib/constants";
 import type { Hearing } from "../../../types";
 
-const TOTAL_STEPS = 6;
-
-export const HearingPage = () => {
+export const PartnerHearingConfirmPage = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [step, setStep] = useState(1);
+
+  const [pairId, setPairId] = useState<string | null>(null);
+  const [creatorHearing, setCreatorHearing] = useState<Hearing | null>(null);
+  const [initLoading, setInitLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [step, setStep] = useState(1);
 
-  const [hearing, setHearing] = useState<Partial<Hearing>>({
-    genres: [],
-    prefecture: "",
-    range: undefined,
-    children: undefined,
-    transport: undefined,
-    budget: undefined,
-    indoor: undefined,
-    freetext: "",
-  });
+  // パートナーの編集用ローカル状態（creatorHearingで初期化）
+  const [partnerGenres, setPartnerGenres] = useState<string[]>([]);  // 追加分のみ
+  const [hearing, setHearing] = useState<Partial<Hearing>>({});      // 全項目（creatorの値で初期化）
 
   const [isOverseas, setIsOverseas] = useState(false);
   const [overseasRegion, setOverseasRegion] = useState<string>(OVERSEAS_REGIONS[0]);
   const [overseasCountry, setOverseasCountry] = useState("");
   const [otherText, setOtherText] = useState("");
 
+  const TOTAL_STEPS = 6;
+
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      const id = await getUserPairId(user.uid);
+      if (!id) { navigate("/", { replace: true }); return; }
+      setPairId(id);
+
+      const pairSnap = await getDoc(doc(db, "pairs", id));
+      if (!pairSnap.exists()) { navigate("/", { replace: true }); return; }
+      const data = pairSnap.data();
+
+      if (data.matchingFinalized) { navigate("/home", { replace: true }); return; }
+      if (data.partnerHearingConfirmed) { navigate("/setup/plan-confirm", { replace: true }); return; }
+
+      const h = data.hearing as Hearing;
+      if (!h) { navigate("/setup/partner-waiting", { replace: true }); return; }
+
+      setCreatorHearing(h);
+      setHearing({ ...h });
+      if (h.overseas) {
+        setIsOverseas(true);
+        setOverseasRegion(h.overseas);
+      }
+      setInitLoading(false);
+    })();
+  }, [user, navigate]);
+
   const update = (key: keyof Hearing, value: string | string[] | undefined) =>
     setHearing((prev) => ({ ...prev, [key]: value }));
 
-  const toggleGenre = (id: string) => {
-    const genres = hearing.genres ?? [];
-    update("genres", genres.includes(id) ? genres.filter((g) => g !== id) : [...genres, id]);
+  const togglePartnerGenre = (id: string) => {
+    const locked = creatorHearing?.genres ?? [];
+    if (locked.includes(id)) return; // creator のジャンルは削除不可
+    setPartnerGenres((prev) =>
+      prev.includes(id) ? prev.filter((g) => g !== id) : [...prev, id]
+    );
   };
 
   const handleRegionSelect = (r: string) => {
@@ -59,7 +88,6 @@ export const HearingPage = () => {
   };
 
   const canNext = () => {
-    if (step === 1) return (hearing.genres?.length ?? 0) > 0;
     if (step === 2) return isOverseas
       ? !!hearing.overseas
       : hearing.prefecture === "全国" || (!!hearing.prefecture && !!hearing.range);
@@ -67,7 +95,7 @@ export const HearingPage = () => {
     if (step === 4) return !!hearing.transport;
     if (step === 5) return !!hearing.budget;
     if (step === 6) return !!hearing.indoor;
-    return false;
+    return true; // step 1 は常に通過可（creatorのジャンルが既に存在）
   };
 
   const handleNext = () => {
@@ -76,34 +104,42 @@ export const HearingPage = () => {
   };
 
   const handleSubmit = async () => {
-    if (!user) return;
+    if (!pairId || !creatorHearing) return;
     setSaving(true);
     setError(null);
     try {
-      const pairId = await getUserPairId(user.uid);
-      if (!pairId) throw new Error("pairId not found");
+      const finalGenres = [...new Set([...creatorHearing.genres, ...partnerGenres])];
+      const partnerFreetext = hearing.freetext ?? "";
+      const creatorFreetext = creatorHearing.freetext ?? "";
+      const combinedFreetext = [creatorFreetext, partnerFreetext].filter(Boolean).join("。");
 
-      await updateDoc(doc(db, "pairs", pairId), {
-        hearing: { ...hearing, updatedAt: serverTimestamp() },
-        // 前回のプラン承認フラグをリセット
-        partnerHearingConfirmed: false,
-        finalHearing: null,
-        creatorPlanApproved: false,
-        partnerPlanApproved: false,
-      });
+      const finalHearing: Hearing = {
+        ...creatorHearing,
+        ...hearing,
+        genres: finalGenres,
+        freetext: combinedFreetext,
+      };
 
-      navigate("/setup/creator-waiting", { replace: true });
+      await saveFinalHearing(pairId, finalHearing);
+      navigate("/setup/plan-confirm", { replace: true });
     } catch {
       setError("保存に失敗しました。もう一度お試しください。");
       setSaving(false);
     }
   };
 
+  if (initLoading) return <Loading message="プランを読み込み中..." />;
+
+  const lockedGenres = creatorHearing?.genres ?? [];
+
   return (
-    <div className="flex flex-col min-h-screen px-6 pt-12 pb-8">
-      <div className="w-full max-w-sm mx-auto mb-8">
-        <div className="flex justify-between text-xs mb-2"
-             style={{ color: "var(--color-text-soft)" }}>
+    <div className="flex flex-col min-h-screen px-6 pt-12 pb-8"
+         style={{ background: "var(--color-bg)", fontFamily: "var(--font-sans)" }}>
+      <div className="w-full max-w-sm mx-auto mb-6">
+        <p className="text-xs text-center mb-3" style={{ color: "var(--color-primary)", fontWeight: 600 }}>
+          パートナーが作成したプランを確認・修正できます
+        </p>
+        <div className="flex justify-between text-xs mb-2" style={{ color: "var(--color-text-soft)" }}>
           <span>STEP {step} / {TOTAL_STEPS}</span>
         </div>
         <div className="w-full h-1.5 rounded-full" style={{ background: "var(--color-border)" }}>
@@ -114,25 +150,34 @@ export const HearingPage = () => {
 
       <div className="flex-1 flex flex-col items-center w-full max-w-sm mx-auto gap-5">
 
+        {/* STEP 1: ジャンル（creatorのは固定、追加のみ可） */}
         {step === 1 && (
           <>
             <h2 className="text-lg font-bold text-center" style={{ color: "var(--color-text-main)" }}>
               どんな体験が好きですか？
             </h2>
-            <p className="text-sm text-center" style={{ color: "var(--color-text-mid)" }}>複数選択できます</p>
+            <p className="text-xs text-center" style={{ color: "var(--color-text-soft)" }}>
+              🔒 グレーはパートナーが選択済み（変更不可）。追加でタップして選べます。
+            </p>
             <div className="grid grid-cols-2 gap-3 w-full">
               {GENRES.map((g) => {
-                const selected = hearing.genres?.includes(g.id);
+                const locked = lockedGenres.includes(g.id);
+                const added  = partnerGenres.includes(g.id);
+                const active = locked || added;
                 return (
-                  <button key={g.id} onClick={() => toggleGenre(g.id)}
+                  <button key={g.id} onClick={() => togglePartnerGenre(g.id)}
                     className="flex items-center gap-3 p-4 rounded-2xl border-2 text-left transition-all"
                     style={{
-                      borderColor: selected ? "var(--color-primary)" : "var(--color-border)",
-                      background: selected ? "var(--color-primary-light)" : "var(--color-surface)",
-                      color: "var(--color-text-main)",
+                      borderColor: locked ? "var(--color-border)" : active ? "var(--color-primary)" : "var(--color-border)",
+                      background: locked ? "var(--color-surface)" : active ? "var(--color-primary-light)" : "var(--color-surface)",
+                      color: locked ? "var(--color-text-soft)" : "var(--color-text-main)",
+                      opacity: locked ? 0.7 : 1,
                     }}>
                     <span className="text-2xl">{g.emoji}</span>
-                    <span className="text-xs font-medium">{g.label}</span>
+                    <div className="flex flex-col">
+                      <span className="text-xs font-medium">{g.label}</span>
+                      {locked && <span className="text-xs" style={{ color: "var(--color-text-soft)" }}>🔒</span>}
+                    </div>
                   </button>
                 );
               })}
@@ -140,6 +185,7 @@ export const HearingPage = () => {
           </>
         )}
 
+        {/* STEP 2: エリア */}
         {step === 2 && (
           <>
             <h2 className="text-lg font-bold text-center" style={{ color: "var(--color-text-main)" }}>
@@ -182,8 +228,7 @@ export const HearingPage = () => {
                   <>
                     <select className="w-full border-2 rounded-2xl px-4 py-3 text-base outline-none"
                       style={{ borderColor: "var(--color-border)", color: "var(--color-text-main)", background: "var(--color-surface)" }}
-                      value={hearing.prefecture ?? ""}
-                      onChange={(e) => update("prefecture", e.target.value)}>
+                      value={hearing.prefecture ?? ""} onChange={(e) => update("prefecture", e.target.value)}>
                       <option value="">都道府県を選択</option>
                       {PREFECTURES.map((p) => <option key={p} value={p}>{p}</option>)}
                     </select>
@@ -263,8 +308,9 @@ export const HearingPage = () => {
             <textarea
               className="w-full border-2 rounded-2xl px-4 py-3 text-sm outline-none resize-none mt-2"
               style={{ borderColor: "var(--color-border)", color: "var(--color-text-main)", background: "var(--color-surface)" }}
-              placeholder="その他リクエストがあれば（任意・100文字）"
-              maxLength={100} rows={3} value={hearing.freetext}
+              placeholder="追加のリクエストがあれば（任意・100文字）"
+              maxLength={100} rows={3}
+              value={hearing.freetext === creatorHearing?.freetext ? "" : (hearing.freetext ?? "")}
               onChange={(e) => update("freetext", e.target.value)} />
           </>
         )}
@@ -277,7 +323,7 @@ export const HearingPage = () => {
           <button className="btn-secondary" style={{ flex: 1 }} onClick={() => setStep((s) => s - 1)}>戻る</button>
         )}
         <button className="btn-primary" style={{ flex: 2 }} onClick={handleNext} disabled={!canNext() || saving}>
-          {saving ? "保存中..." : step === TOTAL_STEPS ? "パートナーに確認してもらう" : "次へ"}
+          {saving ? "保存中..." : step === TOTAL_STEPS ? "このプランで確認へ" : "次へ"}
         </button>
       </div>
     </div>
