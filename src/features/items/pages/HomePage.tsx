@@ -1,6 +1,6 @@
 // src/features/items/pages/HomePage.tsx
 import { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useItems } from "../hooks/useItems";
 import { Loading } from "../../../components/Loading";
 import { getDisplayName } from "../../pair/services/pairService";
@@ -37,6 +37,7 @@ function readCachedHomeState(): {
 
 export const HomePage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { pairId, loading: pairLoading } = usePair();
   const { items, loading } = useItems(pairId);
 
@@ -52,6 +53,20 @@ export const HomePage = () => {
     () => readCachedHomeState().hearing ?? null
   );
   const [breakdownItem, setBreakdownItem] = useState<{ item: Item; bd: ScoreBreakdown } | null>(null);
+
+  const openScoreModal = (item: Item, bd: ScoreBreakdown) => {
+    setBreakdownItem({ item, bd });
+    navigate("/home", { state: { ...(location.state ?? {}), modal: "score" } });
+  };
+  const closeScoreModal = () => {
+    setBreakdownItem(null);
+    if ((location.state as Record<string, unknown> | null)?.modal === "score") navigate(-1);
+  };
+
+  useEffect(() => {
+    const modal = (location.state as Record<string, unknown> | null)?.modal;
+    if (modal !== "score" && breakdownItem) setBreakdownItem(null);
+  }, [location.state]); // eslint-disable-line react-hooks/exhaustive-deps
   const [search, setSearch] = useState("");
   const [doneOpen, setDoneOpen] = useState<boolean>(
     () => readCachedHomeState().doneOpen ?? false
@@ -419,7 +434,7 @@ export const HomePage = () => {
                     <GoodCard key={item.itemId} item={item}
                               breakdown={bd}
                               onTap={() => navigateToDetail(item.itemId)}
-                              onScoreTap={() => bd && setBreakdownItem({ item, bd })} />
+                              onScoreTap={() => bd && openScoreModal(item, bd)} />
                   );
                 })}
               </div>
@@ -456,7 +471,7 @@ export const HomePage = () => {
                   <GoodCard key={item.itemId} item={item}
                             breakdown={bd}
                             onTap={() => navigateToDetail(item.itemId)}
-                            onScoreTap={() => bd && setBreakdownItem({ item, bd })} />
+                            onScoreTap={() => bd && openScoreModal(item, bd)} />
                 );
               })}
             </div>
@@ -533,7 +548,7 @@ export const HomePage = () => {
         <ScoreBreakdownModal
           item={breakdownItem.item}
           bd={breakdownItem.bd}
-          onClose={() => setBreakdownItem(null)}
+          onClose={closeScoreModal}
         />
       )}
 
@@ -560,8 +575,7 @@ export const HomePage = () => {
              onClick={closeAddModal}>
           <div onClick={(e) => e.stopPropagation()}
                style={{ width: "100%", background: "var(--color-bg)", borderRadius: "20px 20px 0 0",
-                        display: "flex", flexDirection: "column", maxHeight: "90dvh",
-                        overflow: "hidden" }}>
+                        display: "flex", flexDirection: "column", maxHeight: "90dvh" }}>
             {/* ドラッグハンドル（スワイプ判定はここだけ） */}
             <div onTouchStart={handleModalTouchStart}
                  onTouchEnd={handleModalTouchEnd}
@@ -572,9 +586,9 @@ export const HomePage = () => {
             </div>
             {/* スクロール可能なコンテンツ */}
             <div ref={modalContentRef}
-                 style={{ overflowY: "auto", overscrollBehavior: "contain", scrollbarWidth: "none",
-                          padding: "0 20px 48px", display: "flex", flexDirection: "column", gap: 16,
-                          flex: 1, minHeight: 0 }}>
+                 style={{ overflowY: "auto",
+                          display: "flex", flexDirection: "column", gap: 16,
+                          padding: "0 20px 48px" }}>
 
             {/* タイトル */}
             <div>
@@ -792,13 +806,6 @@ const SectionLabel = ({ children, style }: { children: React.ReactNode; style?: 
 const ScoreBreakdownModal = ({ item, bd, onClose }: {
   item: Item; bd: ScoreBreakdown; onClose: () => void;
 }) => {
-  useEffect(() => {
-    window.history.pushState({ ...window.history.state, modal: "score" }, "");
-    const handlePop = () => onClose();
-    window.addEventListener("popstate", handlePop);
-    return () => window.removeEventListener("popstate", handlePop);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
   const hasArea = !!(item.prefecture || item.overseas);
   const rows: { label: string; pts: number; na: boolean; icon: string }[] = [
     { label: "カテゴリ一致",           pts: bd.genres,    na: false,                          icon: bd.genres > 0    ? "✓" : "✗" },
@@ -816,8 +823,7 @@ const ScoreBreakdownModal = ({ item, bd, onClose }: {
       <div onClick={(e) => e.stopPropagation()}
            style={{ width: "100%", background: "var(--color-bg)",
                     borderRadius: "20px 20px 0 0",
-                    maxHeight: "88dvh", display: "flex", flexDirection: "column",
-                    overflow: "hidden" }}>
+                    maxHeight: "88dvh", display: "flex", flexDirection: "column" }}>
         <div style={{ padding: "24px 20px 0", flexShrink: 0 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 4 }}>
             <span style={{ fontSize: 22, fontWeight: 700, color: "var(--color-primary)",
@@ -830,9 +836,7 @@ const ScoreBreakdownModal = ({ item, bd, onClose }: {
             {item.title}
           </p>
         </div>
-        <div style={{ overflowY: "auto", overscrollBehavior: "contain",
-                      padding: "0 20px 48px", scrollbarWidth: "none",
-                      flex: 1, minHeight: 0 }}>
+        <div style={{ overflowY: "auto", padding: "0 20px 48px" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
             {rows.map(({ label, pts, na, icon }) => (
               <div key={label}
