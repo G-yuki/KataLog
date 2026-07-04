@@ -33,6 +33,18 @@ function readCachedHearing(): Hearing | null {
   return null;
 }
 
+function readCachedSuggestNames(): { myName: string | null; partnerName: string | null } {
+  try {
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const key = sessionStorage.key(i);
+      if (key?.startsWith("suggest_names_")) {
+        return JSON.parse(sessionStorage.getItem(key) ?? "{}") as { myName: string | null; partnerName: string | null };
+      }
+    }
+  } catch { /* ignore */ }
+  return { myName: null, partnerName: null };
+}
+
 // 定数から id→label の逆引きマップを生成
 const toMap = (opts: readonly { id: string; label: string }[]) =>
   Object.fromEntries(opts.map((o) => [o.id, o.label]));
@@ -67,8 +79,8 @@ export const SuggestPage = () => {
   }, []);
   const [showIntro, setShowIntro] = useState(() => !localStorage.getItem("askAiIntroSeen"));
   const [hearing, setHearing] = useState<Hearing | null>(() => readCachedHearing());
-  const [myName, setMyName] = useState<string | null>(null);
-  const [partnerName, setPartnerName] = useState<string | null>(null);
+  const [myName, setMyName] = useState<string | null>(() => readCachedSuggestNames().myName);
+  const [partnerName, setPartnerName] = useState<string | null>(() => readCachedSuggestNames().partnerName);
   const [editHearing, setEditHearing] = useState<Partial<Hearing>>({});
   const [suggestions, setSuggestions] = useState<ItemDraft[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -97,6 +109,7 @@ export const SuggestPage = () => {
           ]);
           setMyName(me);
           setPartnerName(partner);
+          try { sessionStorage.setItem(`suggest_names_${pairId}`, JSON.stringify({ myName: me, partnerName: partner })); } catch { /* ignore */ }
         }
       }
       setInitLoading(false);
@@ -306,7 +319,9 @@ export const SuggestPage = () => {
         {step === "generating" && (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center",
                         justifyContent: "center", height: "100%", gap: 16, paddingTop: 80 }}>
-            <p style={{ fontSize: 36, animation: "pulse 1.4s ease-in-out infinite" }}>✦</p>
+            <div style={{ animation: "pulse 1.4s ease-in-out infinite", display: "inline-flex" }}>
+              <SparkleIcon size={52} />
+            </div>
             <p style={{ fontSize: 15, color: "var(--color-text-mid)", fontWeight: 500 }}>
               AIが提案を考えています...
             </p>

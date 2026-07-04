@@ -83,8 +83,11 @@ export const HearingPage = () => {
       const pairId = await getUserPairId(user.uid);
       if (!pairId) throw new Error("pairId not found");
 
+      const hearingData = Object.fromEntries(
+        Object.entries({ ...hearing }).filter(([, v]) => v !== undefined)
+      );
       await updateDoc(doc(db, "pairs", pairId), {
-        hearing: { ...hearing, updatedAt: serverTimestamp() },
+        hearing: { ...hearingData, updatedAt: serverTimestamp() },
         // 前回のプラン承認フラグをリセット
         partnerHearingConfirmed: false,
         finalHearing: null,

@@ -63,12 +63,11 @@ export const QuickGuide = ({ onComplete }: { onComplete: () => void }) => {
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <p style={{ fontSize: 22 }}>📖</p>
             <h3 style={{
               fontFamily: "var(--font-serif)", fontSize: 18, fontWeight: 600,
               color: "var(--color-text-main)",
             }}>
-              クイックガイド
+              かんたんガイド
             </h3>
             <p style={{ fontSize: 13, color: "var(--color-text-mid)", lineHeight: 1.8 }}>
               アプリの使い方を4ステップで体験できます。<br />
@@ -100,7 +99,7 @@ const StepHearing = ({ onNext }: { onNext: () => void }) => (
         fontFamily: "var(--font-serif)", fontSize: 20, fontWeight: 600,
         color: "var(--color-text-main)", marginBottom: 8,
       }}>
-        まず、好みをAIに教えよう
+        はじめに、好みをヒアリング
       </h2>
       <p style={{ fontSize: 13, color: "var(--color-text-mid)", lineHeight: 1.7 }}>
         いくつかの質問に答えるだけで、ふたりにぴったりな体験をAIがピックアップします。
@@ -131,7 +130,7 @@ const StepHearing = ({ onNext }: { onNext: () => void }) => (
         ))}
       </div>
       <p style={{ fontSize: 11, color: "var(--color-text-soft)" }}>
-        エリアや予算、移動手段なども、ヒアリング予定です。<br />
+        エリアや予算、移動手段なども、ヒアリング。<br />
         気軽に答えてみてくださいね！✨
       </p>
     </div>
@@ -168,7 +167,7 @@ const StepSwipe = ({ onNext }: { onNext: () => void }) => {
           ボタンで直感的に選ぶ
         </h2>
         <p style={{ fontSize: 13, color: "var(--color-text-mid)", lineHeight: 1.7 }}>
-          ふたりそれぞれが同じ候補を選びます。回答を組み合わせてリストが自動で完成します。
+          ふたりそれぞれが同じ候補を選びます。<br />回答を組み合わせてリストが自動で完成します。
         </p>
       </div>
 
@@ -210,7 +209,7 @@ const StepSwipe = ({ onNext }: { onNext: () => void }) => {
               transition: "opacity 0.2s",
             }}
           >
-            興味アリ ↑　←　タップしてみて！
+            興味アリ　←　タップしてみて！
           </button>
           <div style={{ display: "flex", gap: 10 }}>
             <button
@@ -221,7 +220,7 @@ const StepSwipe = ({ onNext }: { onNext: () => void }) => {
                 transition: "opacity 0.2s",
               }}
             >
-              ← 興味なし
+              興味なし
             </button>
             <button
               onClick={() => handleAction("good")}
@@ -231,7 +230,7 @@ const StepSwipe = ({ onNext }: { onNext: () => void }) => {
                 transition: "opacity 0.2s",
               }}
             >
-              あとで →
+              あとで
             </button>
           </div>
         </div>
@@ -310,7 +309,7 @@ const StepMemory = ({ onNext }: { onNext: () => void }) => {
           体験したら思い出に残そう
         </h2>
         <p style={{ fontSize: 13, color: "var(--color-text-mid)", lineHeight: 1.7 }}>
-          完了にすると写真やメモと一緒に記録されます。ふたりだけの思い出として残ります。
+          完了にすると、写真やメモと一緒に保存できます。<br />ふたりだけの思い出として残ります。
         </p>
       </div>
 

@@ -55,9 +55,9 @@ export const PartnerWaitingPage = () => {
         リストを準備中です
       </h2>
       <p className="text-sm leading-relaxed" style={{ color: "var(--color-text-mid)" }}>
-        それぞれのスマホで回答します。<br /><br />
-        回答が完了したら、<br />
-        スワイプ画面がこちらに表示されます。<br />
+        パートナーが回答中です。<br /><br />
+        ヒアリングが完了したら、<br />
+        選択したプランがこちらに表示されます。<br />
         このままお待ちください。
       </p>
       <div className="flex gap-2 mt-2">
