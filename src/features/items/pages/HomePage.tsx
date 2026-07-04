@@ -572,7 +572,8 @@ export const HomePage = () => {
             {/* スクロール可能なコンテンツ */}
             <div ref={modalContentRef}
                  style={{ overflowY: "auto", overscrollBehavior: "contain", scrollbarWidth: "none",
-                          padding: "0 20px 48px", display: "flex", flexDirection: "column", gap: 16 }}>
+                          padding: "0 20px 48px", display: "flex", flexDirection: "column", gap: 16,
+                          flex: 1, minHeight: 0 }}>
 
             {/* タイトル */}
             <div>
@@ -795,7 +796,7 @@ const ScoreBreakdownModal = ({ item, bd, onClose }: {
     const handlePop = () => onClose();
     window.addEventListener("popstate", handlePop);
     return () => window.removeEventListener("popstate", handlePop);
-  }, [onClose]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const hasArea = !!(item.prefecture || item.overseas);
   const rows: { label: string; pts: number; na: boolean; icon: string }[] = [
@@ -828,7 +829,8 @@ const ScoreBreakdownModal = ({ item, bd, onClose }: {
           </p>
         </div>
         <div style={{ overflowY: "auto", overscrollBehavior: "contain",
-                      padding: "0 20px 48px", scrollbarWidth: "none" }}>
+                      padding: "0 20px 48px", scrollbarWidth: "none",
+                      flex: 1, minHeight: 0 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
             {rows.map(({ label, pts, na, icon }) => (
               <div key={label}
