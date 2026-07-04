@@ -130,7 +130,7 @@ export const HomePage = () => {
 
   useEffect(() => {
     if (!showAddModal) return;
-    window.history.pushState({ modal: "add" }, "");
+    window.history.pushState({ ...window.history.state, modal: "add" }, "");
     const handlePop = () => setShowAddModal(false);
     window.addEventListener("popstate", handlePop);
     return () => window.removeEventListener("popstate", handlePop);
@@ -560,7 +560,8 @@ export const HomePage = () => {
              onClick={closeAddModal}>
           <div onClick={(e) => e.stopPropagation()}
                style={{ width: "100%", background: "var(--color-bg)", borderRadius: "20px 20px 0 0",
-                        display: "flex", flexDirection: "column", maxHeight: "90dvh" }}>
+                        display: "flex", flexDirection: "column", maxHeight: "90dvh",
+                        overflow: "hidden" }}>
             {/* ドラッグハンドル（スワイプ判定はここだけ） */}
             <div onTouchStart={handleModalTouchStart}
                  onTouchEnd={handleModalTouchEnd}
@@ -792,7 +793,7 @@ const ScoreBreakdownModal = ({ item, bd, onClose }: {
   item: Item; bd: ScoreBreakdown; onClose: () => void;
 }) => {
   useEffect(() => {
-    window.history.pushState({ modal: "score" }, "");
+    window.history.pushState({ ...window.history.state, modal: "score" }, "");
     const handlePop = () => onClose();
     window.addEventListener("popstate", handlePop);
     return () => window.removeEventListener("popstate", handlePop);
@@ -815,7 +816,8 @@ const ScoreBreakdownModal = ({ item, bd, onClose }: {
       <div onClick={(e) => e.stopPropagation()}
            style={{ width: "100%", background: "var(--color-bg)",
                     borderRadius: "20px 20px 0 0",
-                    maxHeight: "88dvh", display: "flex", flexDirection: "column" }}>
+                    maxHeight: "88dvh", display: "flex", flexDirection: "column",
+                    overflow: "hidden" }}>
         <div style={{ padding: "24px 20px 0", flexShrink: 0 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 4 }}>
             <span style={{ fontSize: 22, fontWeight: 700, color: "var(--color-primary)",
