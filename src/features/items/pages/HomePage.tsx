@@ -60,12 +60,6 @@ export const HomePage = () => {
   const [guideDetailOpen, setGuideDetailOpen] = useState(false);
 
 
-  const applySearch = (arr: Item[]): Item[] => {
-    const q = search.trim().toLowerCase();
-    if (!q) return arr;
-    return arr.filter((i) => i.title.toLowerCase().includes(q));
-  };
-
   const scrollRef = useRef<HTMLDivElement>(null);
   const restoredRef = useRef(false);
 
@@ -214,23 +208,34 @@ export const HomePage = () => {
     return new Map(items.map((item) => [item.itemId, scoreItem(item, hearing, weather)]));
   }, [items, hearing, weather]);
 
-  const activeItems = items.filter((i) => i.status !== "done");
-  const doneItems   = items.filter((i) => i.status === "done");
-  const goItems     = activeItems.filter((i) => i.isWant);
-  const goodItems   = activeItems.filter((i) => !i.isWant && (i.matchTier ?? "good") !== "try");
-  const tryItems    = activeItems.filter((i) => !i.isWant && i.matchTier === "try");
+  const { activeItems, doneItems, goItems, goodItems, tryItems } = useMemo(() => {
+    const active = items.filter((i) => i.status !== "done");
+    const done   = items.filter((i) => i.status === "done");
+    return {
+      activeItems: active,
+      doneItems:   done,
+      goItems:     active.filter((i) => i.isWant),
+      goodItems:   active.filter((i) => !i.isWant && (i.matchTier ?? "good") !== "try"),
+      tryItems:    active.filter((i) => !i.isWant && i.matchTier === "try"),
+    };
+  }, [items]);
 
-  const applyFilter = (arr: Item[]) =>
-    selectedCategories.length === 0 ? arr : arr.filter((i) => selectedCategories.includes(i.category));
-  const applySort = (arr: Item[]) =>
-    sortOrder === "score"
-      ? [...arr].sort((a, b) => (scoreMap.get(b.itemId)?.total ?? 0) - (scoreMap.get(a.itemId)?.total ?? 0))
-      : arr;
-  const applyAll = (arr: Item[]) => applySort(applyFilter(applySearch(arr)));
+  const { sortedGoItems, filteredGood, filteredTry } = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const matchSearch = (i: Item) => !q || i.title.toLowerCase().includes(q);
+    const matchCat    = (i: Item) => selectedCategories.length === 0 || selectedCategories.includes(i.category);
+    const byScore     = (a: Item, b: Item) =>
+      (scoreMap.get(b.itemId)?.total ?? 0) - (scoreMap.get(a.itemId)?.total ?? 0);
 
-  const sortedGoItems = applyFilter(applySearch(goItems));
-  const filteredGood  = applyAll(goodItems);
-  const filteredTry   = applyAll(tryItems);
+    const filter = (arr: Item[]) => arr.filter((i) => matchSearch(i) && matchCat(i));
+    const sort   = (arr: Item[]) => sortOrder === "score" ? [...arr].sort(byScore) : arr;
+
+    return {
+      sortedGoItems: filter(goItems),
+      filteredGood:  sort(filter(goodItems)),
+      filteredTry:   sort(filter(tryItems)),
+    };
+  }, [goItems, goodItems, tryItems, search, selectedCategories, sortOrder, scoreMap]);
 
   if (pairLoading || loading) return <Loading message={pairLoading ? "データ確認中..." : "読み込み中..."} />;
 
@@ -794,14 +799,13 @@ const ScoreBreakdownModal = ({ item, bd, onClose }: {
 
   const hasArea = !!(item.prefecture || item.overseas);
   const rows: { label: string; pts: number; na: boolean; icon: string }[] = [
-    { label: "カテゴリ一致",  pts: bd.genres,    na: false,                         icon: bd.genres > 0    ? "✓" : "✗" },
-    { label: "屋内外一致",    pts: bd.indoor,    na: false,                         icon: bd.indoor > 0    ? "✓" : "✗" },
-    { label: "子連れ条件",    pts: bd.children,  na: item.kidsFriendly === undefined, icon: bd.children > 0  ? "✓" : item.kidsFriendly === undefined ? "−" : "✗" },
-    { label: "交通手段",      pts: bd.transport, na: item.access === undefined,      icon: bd.transport > 0 ? "✓" : item.access === undefined ? "−" : "✗" },
-    { label: "予算",          pts: bd.budget,    na: item.budgetLevel === undefined,  icon: bd.budget >= 15  ? "✓" : bd.budget > 0 ? "△" : item.budgetLevel === undefined ? "−" : "✗" },
-    { label: "今の季節",      pts: bd.season,    na: item.seasonBest === undefined,  icon: bd.season > 0    ? "✓" : item.seasonBest === undefined ? "−" : "✗" },
-    { label: "天気補正",      pts: bd.weather,   na: item.weatherSensitive === undefined, icon: bd.weather > 0 ? "✓" : bd.weather < 0 ? "✗" : "−" },
-    { label: "エリア一致",    pts: bd.area,      na: !hasArea,                      icon: bd.area >= 10 ? "✓" : bd.area > 0 ? "△" : !hasArea ? "−" : "✗" },
+    { label: "カテゴリ一致",           pts: bd.genres,    na: false,                          icon: bd.genres > 0    ? "✓" : "✗" },
+    { label: "環境（屋内外×天気×好み）", pts: bd.env,       na: false,                          icon: bd.env > 0 ? "✓" : bd.env < 0 ? "✗" : "−" },
+    { label: "子連れ条件",             pts: bd.children,  na: item.kidsFriendly === undefined, icon: bd.children > 0  ? "✓" : item.kidsFriendly === undefined ? "−" : "✗" },
+    { label: "交通手段",               pts: bd.transport, na: item.access === undefined,       icon: bd.transport > 0 ? "✓" : item.access === undefined ? "−" : "✗" },
+    { label: "予算",                   pts: bd.budget,    na: item.budgetLevel === undefined,  icon: bd.budget >= 10  ? "✓" : bd.budget > 0 ? "△" : item.budgetLevel === undefined ? "−" : "✗" },
+    { label: "今の季節",               pts: bd.season,    na: item.seasonBest === undefined,   icon: bd.season > 0    ? "✓" : item.seasonBest === undefined ? "−" : "✗" },
+    { label: "エリア一致",             pts: bd.area,      na: !hasArea,                       icon: bd.area >= 25 ? "✓" : bd.area > 0 ? "△" : !hasArea ? "−" : "✗" },
   ];
   return (
     <div onClick={onClose}

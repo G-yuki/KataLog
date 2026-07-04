@@ -3,18 +3,17 @@ import type { WeatherCondition } from "./weather";
 import { OVERSEAS_COUNTRIES } from "./constants";
 
 export interface ScoreBreakdown {
-  genres: number;    // 0 or +30
-  indoor: number;    // 0 or +20
-  children: number;  // 0 or +15
-  transport: number; // 0 or +10
-  weather: number;   // -20, 0, or +10
-  budget: number;    // 0, +8, or +15
-  season: number;    // 0 or +10
-  area: number;      // 0, +5, or +10
+  genres: number;    // 0 or +20
+  env: number;       // -50〜+40 (屋内外 × 天気 × 好み)
+  children: number;  // 0 or +5
+  transport: number; // 0 or +8
+  budget: number;    // 0, +5, or +10
+  season: number;    // 0 or +12
+  area: number;      // 0, +12, or +25
   total: number;     // 0〜100 に正規化
 }
 
-const MAX_RAW = 30 + 20 + 15 + 10 + 10 + 15 + 10 + 10; // 120
+const MAX_POSITIVE = 40 + 25 + 20 + 12 + 10 + 8 + 5; // 120
 
 const BUDGET_CEILING: Record<string, number> = {
   "3000": 1, "5000": 2, "10000": 3, "30000": 4, "any": 4,
@@ -32,7 +31,6 @@ const JAPAN_REGION: Record<string, string> = {
   "大分県": "九州・沖縄", "宮崎県": "九州・沖縄", "鹿児島県": "九州・沖縄", "沖縄県": "九州・沖縄",
 };
 
-// hearing.overseas の値（地域or国）が item.overseas と同一地方に属するか判定
 function sameOverseasRegion(a: string, b: string): boolean {
   if (a === b) return true;
   for (const [region, countries] of Object.entries(OVERSEAS_COUNTRIES)) {
@@ -48,21 +46,63 @@ function calcAreaScore(item: Item, hearing: Hearing): number {
 
   if (item.overseas) {
     if (!hasOverseas) return 0;
-    return sameOverseasRegion(item.overseas, hearing.overseas!) ? 10 : 0;
+    return sameOverseasRegion(item.overseas, hearing.overseas!) ? 25 : 0;
   }
 
   if (item.prefecture) {
     if (hasOverseas) return 0;
     const hp = hearing.prefecture;
     if (!hp) return 0;
-    if (hp === "全国" || item.prefecture === "全国") return 5;
-    if (item.prefecture === hp) return 10;
+    if (hp === "全国" || item.prefecture === "全国") return 12;
+    if (item.prefecture === hp) return 25;
     const ir = JAPAN_REGION[item.prefecture];
     const hr = JAPAN_REGION[hp];
-    if (ir && hr && ir === hr) return 5;
+    if (ir && hr && ir === hr) return 12;
     return 0;
   }
 
+  return 0;
+}
+
+function calcEnvScore(
+  item: Item,
+  hearing: Hearing,
+  weather: WeatherCondition | null
+): number {
+  const isOutdoor = item.type === "outdoor";
+  const pref = hearing.indoor; // "outdoor" | "indoor" | "both"
+
+  if (weather === "rain" || weather === "snow") {
+    if (isOutdoor) return -50;
+    if (pref === "indoor") return 40;
+    if (pref === "both") return 25;
+    return 0;
+  }
+
+  if (weather === "clear") {
+    if (isOutdoor) {
+      if (pref === "outdoor") return 40;
+      if (pref === "both") return 25;
+      return 0;
+    }
+    return 0; // 晴れ × 屋内 はニュートラル
+  }
+
+  if (weather === "cloudy") {
+    if (isOutdoor) {
+      if (pref === "outdoor") return 20;
+      if (pref === "both") return 12;
+      return 0;
+    }
+    if (pref === "indoor") return 20;
+    if (pref === "both") return 12;
+    return 0;
+  }
+
+  // weather === null: 好み一致のみで判定
+  if (isOutdoor && pref === "outdoor") return 20;
+  if (!isOutdoor && pref === "indoor") return 20;
+  if (pref === "both") return 12;
   return 0;
 }
 
@@ -79,53 +119,42 @@ export function scoreItem(
   hearing: Hearing,
   weather: WeatherCondition | null
 ): ScoreBreakdown {
-  const genres = hearing.genres.includes(item.category) ? 30 : 0;
+  const genres = hearing.genres.includes(item.category) ? 20 : 0;
 
-  const indoor =
-    hearing.indoor === "both" ||
-    (hearing.indoor === "indoor" && item.type === "indoor") ||
-    (hearing.indoor === "outdoor" && item.type === "outdoor")
-      ? 20 : 0;
+  const env = calcEnvScore(item, hearing, weather);
 
   const children =
     item.kidsFriendly === undefined
       ? 0
       : hearing.children === "none"
-        ? (item.kidsFriendly ? 0 : 15)
-        : (item.kidsFriendly ? 15 : 0);
+        ? (item.kidsFriendly ? 0 : 5)
+        : (item.kidsFriendly ? 5 : 0);
 
   const transport =
     item.access === undefined
       ? 0
       : hearing.transport === "both" || item.access === "both" || hearing.transport === item.access
-        ? 10 : 0;
-
-  let weatherScore = 0;
-  if (item.weatherSensitive !== undefined && weather !== null) {
-    if (item.weatherSensitive) {
-      weatherScore = (weather === "clear") ? 10 : (weather === "rain" || weather === "snow") ? -20 : 0;
-    }
-  }
+        ? 8 : 0;
 
   let budget = 0;
   if (item.budgetLevel !== undefined) {
     const ceiling = BUDGET_CEILING[hearing.budget] ?? 4;
     if (item.budgetLevel <= ceiling) {
-      budget = 15;
+      budget = 10;
     } else if (item.budgetLevel === ceiling + 1) {
-      budget = 8;
+      budget = 5;
     }
   }
 
   const season =
     item.seasonBest === undefined
       ? 0
-      : item.seasonBest.includes(currentSeason()) ? 10 : 0;
+      : item.seasonBest.includes(currentSeason()) ? 12 : 0;
 
   const area = calcAreaScore(item, hearing);
 
-  const raw = Math.max(0, genres + indoor + children + transport + weatherScore + budget + season + area);
-  const total = Math.round((raw / MAX_RAW) * 100);
+  const raw = Math.max(0, genres + env + children + transport + budget + season + area);
+  const total = Math.round((raw / MAX_POSITIVE) * 100);
 
-  return { genres, indoor, children, transport, weather: weatherScore, budget, season, area, total };
+  return { genres, env, children, transport, budget, season, area, total };
 }
