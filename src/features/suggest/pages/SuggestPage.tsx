@@ -20,6 +20,19 @@ import { UpdateHearingForm } from "../components/UpdateHearingForm";
 
 type Step = "home" | "update-hearing" | "generating" | "results" | "done";
 
+function readCachedHearing(): Hearing | null {
+  try {
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const key = sessionStorage.key(i);
+      if (key?.startsWith("home_state_")) {
+        const d = JSON.parse(sessionStorage.getItem(key) ?? "{}") as { hearing?: Hearing };
+        if (d.hearing) return d.hearing;
+      }
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+
 // 定数から id→label の逆引きマップを生成
 const toMap = (opts: readonly { id: string; label: string }[]) =>
   Object.fromEntries(opts.map((o) => [o.id, o.label]));
@@ -42,21 +55,18 @@ export const SuggestPage = () => {
   stepRef.current = step;
 
   useEffect(() => {
-    // React Router v6 が history.state に内部状態を持つため、既存 state を保持して追記する
     window.history.pushState({ ...window.history.state, _suggest: true }, "");
     const handlePop = () => {
       if (stepRef.current !== "home") {
         setStep("home");
-        window.history.pushState({ ...window.history.state, _suggest: true }, "");
-      } else {
-        navigate("/home", { replace: true });
       }
+      // step === "home" のときは何もしない。React Router + ブラウザの自然な挙動に任せる
     };
     window.addEventListener("popstate", handlePop);
     return () => window.removeEventListener("popstate", handlePop);
-  }, [navigate]);
+  }, []);
   const [showIntro, setShowIntro] = useState(() => !localStorage.getItem("askAiIntroSeen"));
-  const [hearing, setHearing] = useState<Hearing | null>(null);
+  const [hearing, setHearing] = useState<Hearing | null>(() => readCachedHearing());
   const [myName, setMyName] = useState<string | null>(null);
   const [partnerName, setPartnerName] = useState<string | null>(null);
   const [editHearing, setEditHearing] = useState<Partial<Hearing>>({});
@@ -64,7 +74,7 @@ export const SuggestPage = () => {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [saving, setSaving] = useState(false);
   const [planSaving, setPlanSaving] = useState(false);
-  const [initLoading, setInitLoading] = useState(true);
+  const [initLoading, setInitLoading] = useState(() => readCachedHearing() === null);
 
   useEffect(() => {
     if (pairLoading) return;
@@ -296,7 +306,7 @@ export const SuggestPage = () => {
         {step === "generating" && (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center",
                         justifyContent: "center", height: "100%", gap: 16, paddingTop: 80 }}>
-            <p style={{ fontSize: 36 }}>✦</p>
+            <p style={{ fontSize: 36, animation: "pulse 1.4s ease-in-out infinite" }}>✦</p>
             <p style={{ fontSize: 15, color: "var(--color-text-mid)", fontWeight: 500 }}>
               AIが提案を考えています...
             </p>

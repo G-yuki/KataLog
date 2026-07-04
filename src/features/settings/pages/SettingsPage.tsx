@@ -19,14 +19,16 @@ export const SettingsPage = () => {
   const navigate = useNavigate();
   const { pairId, loading: pairLoading } = usePair();
 
-  const [loading, setLoading] = useState(true);
-  const [nickname, setNickname] = useState("");
+  const [loading, setLoading] = useState(() => !localStorage.getItem("katalog_nickname"));
+  const [nickname, setNickname] = useState(() => localStorage.getItem("katalog_nickname") ?? "");
   const [editingNickname, setEditingNickname] = useState(false);
   const [nicknameDraft, setNicknameDraft] = useState("");
   const [nicknameSaving, setNicknameSaving] = useState(false);
   const [nicknameError, setNicknameError] = useState<string | null>(null);
 
-  const [partnerName, setPartnerName] = useState<string | null>(null);
+  const [partnerName, setPartnerName] = useState<string | null>(
+    () => localStorage.getItem("katalog_partner_name")
+  );
 
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -41,14 +43,18 @@ export const SettingsPage = () => {
         getDisplayName(user.uid),
         pairId ? getDoc(doc(db, "pairs", pairId)) : Promise.resolve(null),
       ]);
-      setNickname(name ?? "");
+      const resolvedName = name ?? "";
+      setNickname(resolvedName);
+      localStorage.setItem("katalog_nickname", resolvedName);
 
       if (pairSnap?.exists()) {
         const members = pairSnap.data().members as string[];
         const partnerUid = members.find((m) => m !== user.uid);
         if (partnerUid) {
           const pname = await getDisplayName(partnerUid);
-          setPartnerName(pname);
+          const resolvedPartner = pname ?? "";
+          setPartnerName(resolvedPartner);
+          localStorage.setItem("katalog_partner_name", resolvedPartner);
         }
       }
 
@@ -70,6 +76,7 @@ export const SettingsPage = () => {
     setNicknameSaving(true);
     await saveDisplayName(user.uid, trimmed);
     setNickname(trimmed);
+    localStorage.setItem("katalog_nickname", trimmed);
     setEditingNickname(false);
     setNicknameSaving(false);
   };

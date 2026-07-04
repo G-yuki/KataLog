@@ -125,12 +125,16 @@ export const MemoryPage = () => {
 
   // ── ボトムシートスワイプ ──────────────────────────
   const sheetRef = useRef<HTMLDivElement>(null);
-  const sheetTouchStartY = useRef(0);
+  const sheetTouchStartY = useRef(-1);
   const handleSheetTouchStart = (e: React.TouchEvent) => {
+    // スクロールエリア内のタッチは無視（スワイプで閉じる動作を抑制）
+    if (sheetRef.current?.contains(e.target as Node)) return;
     sheetTouchStartY.current = e.touches[0].clientY;
   };
   const handleSheetTouchEnd = (e: React.TouchEvent) => {
+    if (sheetTouchStartY.current < 0) return;
     const delta = e.changedTouches[0].clientY - sheetTouchStartY.current;
+    sheetTouchStartY.current = -1;
     if (delta > 60 && (sheetRef.current?.scrollTop ?? 0) === 0) {
       setSelectedMemory(null);
       setConfirmDelete(false);
@@ -793,7 +797,8 @@ export const MemoryPage = () => {
                onTouchStart={handleSheetTouchStart}
                onTouchEnd={handleSheetTouchEnd}
                style={{ width: "100%", background: "var(--color-bg)", borderRadius: "20px 20px 0 0",
-                        maxHeight: "88dvh", display: "flex", flexDirection: "column" }}>
+                        maxHeight: "88dvh", display: "flex", flexDirection: "column",
+                        overflow: "hidden" }}>
             {/* ドラッグインジケーター */}
             <div style={{ display: "flex", justifyContent: "center", padding: "12px 0 8px" }}>
               <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(0,0,0,0.15)" }} />
@@ -813,7 +818,7 @@ export const MemoryPage = () => {
 
             {/* 本文 */}
             <div ref={sheetRef} style={{ flex: 1, overflowY: "auto", padding: "16px 20px",
-                                         scrollbarWidth: "none" }}>
+                                         overscrollBehavior: "contain", scrollbarWidth: "none" }}>
               <p style={{ fontSize: 14, color: "var(--color-text-main)", lineHeight: 2,
                           fontFamily: "var(--font-sans)", whiteSpace: "pre-wrap" }}>
                 {selectedMemory.content}
