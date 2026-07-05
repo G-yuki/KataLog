@@ -528,7 +528,7 @@ export const fetchRegionalEvents = onCall(
     });
 
     const prompt =
-      `${prefecture}で${dateFrom}から${dateTo}の期間中に開催される実際のイベントを最大15件、` +
+      `${prefecture}で${dateFrom}から${dateTo}の期間中に開催される実際のイベントを最大20件、` +
       `以下のJSON配列のみで回答してください。` +
       `マークダウン・コードブロック・説明文は一切不要です。JSONのみ出力してください。\n\n` +
       `[{"title":"イベント名","date":"YYYY-MM-DD","endDate":"YYYY-MM-DD","location":"会場名","category":"art|music|nature|gourmet|sports|movie|book|cafe|theme|onsen|other","description":"一言説明","url":"イベントページURL"}]\n\n` +
