@@ -1,6 +1,6 @@
 // src/features/items/pages/HomePage.tsx
 import { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useItems } from "../hooks/useItems";
 import { Loading } from "../../../components/Loading";
 import { getDisplayName } from "../../pair/services/pairService";
@@ -37,7 +37,6 @@ function readCachedHomeState(): {
 
 export const HomePage = () => {
   const navigate = useNavigate();
-  const location = useLocation();
   const { pairId, loading: pairLoading } = usePair();
   const { items, loading } = useItems(pairId);
 
@@ -56,17 +55,19 @@ export const HomePage = () => {
 
   const openScoreModal = (item: Item, bd: ScoreBreakdown) => {
     setBreakdownItem({ item, bd });
-    navigate("/home", { state: { ...(location.state ?? {}), modal: "score" } });
   };
   const closeScoreModal = () => {
     setBreakdownItem(null);
-    if ((location.state as Record<string, unknown> | null)?.modal === "score") navigate(-1);
+    if (window.history.state?.modal === "score") window.history.back();
   };
 
   useEffect(() => {
-    const modal = (location.state as Record<string, unknown> | null)?.modal;
-    if (modal !== "score" && breakdownItem) setBreakdownItem(null);
-  }, [location.state]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!breakdownItem) return;
+    window.history.pushState({ ...window.history.state, modal: "score" }, "");
+    const handlePop = () => setBreakdownItem(null);
+    window.addEventListener("popstate", handlePop);
+    return () => window.removeEventListener("popstate", handlePop);
+  }, [breakdownItem]); // eslint-disable-line react-hooks/exhaustive-deps
   const [search, setSearch] = useState("");
   const [doneOpen, setDoneOpen] = useState<boolean>(
     () => readCachedHomeState().doneOpen ?? false
@@ -586,7 +587,7 @@ export const HomePage = () => {
             </div>
             {/* スクロール可能なコンテンツ */}
             <div ref={modalContentRef}
-                 style={{ overflowY: "auto",
+                 style={{ flex: 1, minHeight: 0, overflowY: "auto",
                           display: "flex", flexDirection: "column", gap: 16,
                           padding: "0 20px 48px" }}>
 
@@ -814,7 +815,7 @@ const ScoreBreakdownModal = ({ item, bd, onClose }: {
     { label: "交通手段",               pts: bd.transport, na: item.access === undefined,       icon: bd.transport > 0 ? "✓" : item.access === undefined ? "−" : "✗" },
     { label: "予算",                   pts: bd.budget,    na: item.budgetLevel === undefined,  icon: bd.budget >= 10  ? "✓" : bd.budget > 0 ? "△" : item.budgetLevel === undefined ? "−" : "✗" },
     { label: "今の季節",               pts: bd.season,    na: item.seasonBest === undefined,   icon: bd.season > 0    ? "✓" : item.seasonBest === undefined ? "−" : "✗" },
-    { label: "エリア一致",             pts: bd.area,      na: !hasArea,                       icon: bd.area >= 25 ? "✓" : bd.area > 0 ? "△" : !hasArea ? "−" : "✗" },
+    { label: "エリア一致",             pts: bd.area,      na: !hasArea,                       icon: bd.area >= 18 ? "✓" : bd.area > 0 ? "△" : !hasArea ? "−" : "✗" },
   ];
   return (
     <div onClick={onClose}
@@ -836,7 +837,7 @@ const ScoreBreakdownModal = ({ item, bd, onClose }: {
             {item.title}
           </p>
         </div>
-        <div style={{ overflowY: "auto", padding: "0 20px 48px" }}>
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "0 20px 48px" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
             {rows.map(({ label, pts, na, icon }) => (
               <div key={label}

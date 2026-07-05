@@ -8,12 +8,12 @@ export interface ScoreBreakdown {
   children: number;  // 0 or +5
   transport: number; // 0 or +8
   budget: number;    // 0, +5, or +10
-  season: number;    // 0 or +12
-  area: number;      // 0, +12, or +25
+  season: number;    // 0 or +8
+  area: number;      // 0, +8, or +18
   total: number;     // 0〜100 に正規化
 }
 
-const MAX_POSITIVE = 40 + 25 + 20 + 12 + 10 + 8 + 5; // 120
+const MAX_POSITIVE = 40 + 18 + 20 + 8 + 10 + 8 + 5; // 109
 
 const BUDGET_CEILING: Record<string, number> = {
   "3000": 1, "5000": 2, "10000": 3, "30000": 4, "any": 4,
@@ -46,18 +46,18 @@ function calcAreaScore(item: Item, hearing: Hearing): number {
 
   if (item.overseas) {
     if (!hasOverseas) return 0;
-    return sameOverseasRegion(item.overseas, hearing.overseas!) ? 25 : 0;
+    return sameOverseasRegion(item.overseas, hearing.overseas!) ? 18 : 0;
   }
 
   if (item.prefecture) {
     if (hasOverseas) return 0;
     const hp = hearing.prefecture;
     if (!hp) return 0;
-    if (hp === "全国" || item.prefecture === "全国") return 12;
-    if (item.prefecture === hp) return 25;
+    if (hp === "全国" || item.prefecture === "全国") return 8;
+    if (item.prefecture === hp) return 18;
     const ir = JAPAN_REGION[item.prefecture];
     const hr = JAPAN_REGION[hp];
-    if (ir && hr && ir === hr) return 12;
+    if (ir && hr && ir === hr) return 8;
     return 0;
   }
 
@@ -149,7 +149,7 @@ export function scoreItem(
   const season =
     item.seasonBest === undefined
       ? 0
-      : item.seasonBest.includes(currentSeason()) ? 12 : 0;
+      : item.seasonBest.includes(currentSeason()) ? 8 : 0;
 
   const area = calcAreaScore(item, hearing);
 
