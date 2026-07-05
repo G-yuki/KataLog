@@ -11,13 +11,14 @@ import {
 } from "../../pair/services/pairService";
 import { usePair } from "../../../contexts/PairContext";
 import { resetPairList } from "../../items/services/itemService";
+import { generateInviteUrl } from "../../../lib/token";
 import { db } from "../../../firebase/firestore";
 import { doc, getDoc } from "firebase/firestore";
 
 export const SettingsPage = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
-  const { pairId, loading: pairLoading } = usePair();
+  const { pairId, isSolo, loading: pairLoading } = usePair();
 
   const [loading, setLoading] = useState(() => !localStorage.getItem("katalog_nickname"));
   const [nickname, setNickname] = useState(() => localStorage.getItem("katalog_nickname") ?? "");
@@ -36,6 +37,9 @@ export const SettingsPage = () => {
   const [showReinviteConfirm, setShowReinviteConfirm] = useState(false);
   const [reinviting, setReinviting] = useState(false);
 
+  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
+  const [inviteCopied, setInviteCopied] = useState(false);
+
   useEffect(() => {
     if (!user || pairLoading) return;
     (async () => {
@@ -48,13 +52,17 @@ export const SettingsPage = () => {
       localStorage.setItem("katalog_nickname", resolvedName);
 
       if (pairSnap?.exists()) {
-        const members = pairSnap.data().members as string[];
+        const data = pairSnap.data();
+        const members = data.members as string[];
         const partnerUid = members.find((m) => m !== user.uid);
         if (partnerUid) {
           const pname = await getDisplayName(partnerUid);
           const resolvedPartner = pname ?? "";
           setPartnerName(resolvedPartner);
           localStorage.setItem("katalog_partner_name", resolvedPartner);
+        }
+        if (data.soloMode && data.inviteToken) {
+          setInviteUrl(generateInviteUrl(pairId!, data.inviteToken as string));
         }
       }
 
@@ -188,23 +196,44 @@ export const SettingsPage = () => {
         {/* ペア */}
         {pairId && (
           <Section label="ペア">
-            <Row label="パートナー">
-              <span style={{ fontSize: 14, color: "var(--color-text-main)" }}>
-                {partnerName ?? "（未参加）"}
-              </span>
-            </Row>
-            <Row label="再招待">
-              <button onClick={() => setShowReinviteConfirm(true)}
-                      style={{ background: "none", border: "none", cursor: "pointer",
-                               color: "var(--color-primary)", fontSize: 13, fontWeight: 500,
-                               display: "flex", alignItems: "center", gap: 4 }}>
-                パートナーを外して再招待
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                  <path d="M5 3l4 4-4 4" stroke="currentColor" strokeWidth="1.5"
-                        strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
-            </Row>
+            {!isSolo && (
+              <Row label="パートナー">
+                <span style={{ fontSize: 14, color: "var(--color-text-main)" }}>
+                  {partnerName ?? "（未参加）"}
+                </span>
+              </Row>
+            )}
+            {isSolo ? (
+              <Row label="招待">
+                <button onClick={() => {
+                          if (inviteUrl) { navigator.clipboard.writeText(inviteUrl); setInviteCopied(true); }
+                        }}
+                        style={{ background: "none", border: "none", cursor: "pointer",
+                                 color: "var(--color-primary)", fontSize: 13, fontWeight: 500,
+                                 display: "flex", alignItems: "center", gap: 4 }}>
+                  {inviteCopied ? "コピーしました！" : "招待リンクをコピー"}
+                  {!inviteCopied && (
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                      <path d="M5 3l4 4-4 4" stroke="currentColor" strokeWidth="1.5"
+                            strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )}
+                </button>
+              </Row>
+            ) : (
+              <Row label="再招待">
+                <button onClick={() => setShowReinviteConfirm(true)}
+                        style={{ background: "none", border: "none", cursor: "pointer",
+                                 color: "var(--color-primary)", fontSize: 13, fontWeight: 500,
+                                 display: "flex", alignItems: "center", gap: 4 }}>
+                  パートナーを外して再招待
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <path d="M5 3l4 4-4 4" stroke="currentColor" strokeWidth="1.5"
+                          strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+              </Row>
+            )}
           </Section>
         )}
 
@@ -311,7 +340,7 @@ export const SettingsPage = () => {
             </h2>
             <p style={{ fontSize: 13, color: "var(--color-text-mid)", textAlign: "center",
                         lineHeight: 1.7 }}>
-              ふたりのリストがすべて削除され、<br />
+              {isSolo ? "リストがすべて削除され、" : "ふたりのリストがすべて削除され、"}<br />
               ヒアリングからやり直しになります。<br />
               この操作は元に戻せません。
             </p>

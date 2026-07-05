@@ -2,7 +2,10 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/hooks/useAuth";
+import { usePair } from "../../../contexts/PairContext";
 import { getUserPairId } from "../../pair/services/pairService";
+import { savePendingItemsDraft } from "../../items/services/itemService";
+import { useGenerateItems } from "../hooks/useGenerateItems";
 import { db } from "../../../firebase/firestore";
 import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import {
@@ -16,9 +19,12 @@ const TOTAL_STEPS = 6;
 
 export const HearingPage = () => {
   const { user } = useAuth();
+  const { isSolo } = usePair();
   const navigate = useNavigate();
+  const { generate } = useGenerateItems();
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [hearing, setHearing] = useState<Partial<Hearing>>({
@@ -86,21 +92,50 @@ export const HearingPage = () => {
       const hearingData = Object.fromEntries(
         Object.entries({ ...hearing }).filter(([, v]) => v !== undefined)
       );
-      await updateDoc(doc(db, "pairs", pairId), {
-        hearing: { ...hearingData, updatedAt: serverTimestamp() },
-        // 前回のプラン承認フラグをリセット
-        partnerHearingConfirmed: false,
-        finalHearing: null,
-        creatorPlanApproved: false,
-        partnerPlanApproved: false,
-      });
+      const hearingFull = hearingData as unknown as Hearing;
 
-      navigate("/setup/creator-waiting", { replace: true });
+      if (isSolo) {
+        // ソロ: hearing を保存後、即生成 → pendingItems → swipe へ直行
+        await updateDoc(doc(db, "pairs", pairId), {
+          hearing: { ...hearingData, updatedAt: serverTimestamp() },
+        });
+        setSaving(false);
+        setGenerating(true);
+        const drafts = await generate(hearingFull);
+        if (!drafts) throw new Error("generation failed");
+        const isZenkoku = hearingFull.range === "anywhere" || hearingFull.prefecture === "全国";
+        const area = hearingFull.overseas
+          ? { overseas: hearingFull.overseas }
+          : { prefecture: isZenkoku ? "全国" : hearingFull.prefecture };
+        await savePendingItemsDraft(pairId, drafts, area);
+        navigate("/setup/swipe", { replace: true });
+      } else {
+        // ペア: hearing を保存してパートナー確認待ちへ
+        await updateDoc(doc(db, "pairs", pairId), {
+          hearing: { ...hearingData, updatedAt: serverTimestamp() },
+          partnerHearingConfirmed: false,
+          finalHearing: null,
+          creatorPlanApproved: false,
+          partnerPlanApproved: false,
+        });
+        navigate("/setup/creator-waiting", { replace: true });
+      }
     } catch {
       setError("保存に失敗しました。もう一度お試しください。");
       setSaving(false);
+      setGenerating(false);
     }
   };
+
+  if (generating) return (
+    <div className="flex flex-col items-center justify-center min-h-screen gap-4"
+         style={{ background: "var(--color-bg)", fontFamily: "var(--font-sans)" }}>
+      <p className="text-5xl animate-spin" style={{ animationDuration: "1.4s" }}>✦</p>
+      <p className="text-sm font-medium" style={{ color: "var(--color-text-mid)" }}>
+        AIがあなたにぴったりな体験を探しています...
+      </p>
+    </div>
+  );
 
   return (
     <div className="flex flex-col min-h-screen px-6 pt-12 pb-8">
@@ -250,7 +285,9 @@ export const HearingPage = () => {
         {step === 5 && (
           <>
             <h2 className="text-lg font-bold text-center" style={{ color: "var(--color-text-main)" }}>予算感は？</h2>
-            <p className="text-sm text-center" style={{ color: "var(--color-text-mid)" }}>1回あたり・ふたり（家族）合計</p>
+            <p className="text-sm text-center" style={{ color: "var(--color-text-mid)" }}>
+              {isSolo ? "1回あたりの予算" : "1回あたり・ふたり（家族）合計"}
+            </p>
             {BUDGET_OPTIONS.map((b) => (
               <ChoiceButton key={b.id} label={b.label} selected={hearing.budget === b.id} onClick={() => update("budget", b.id)} />
             ))}
@@ -280,7 +317,9 @@ export const HearingPage = () => {
           <button className="btn-secondary" style={{ flex: 1 }} onClick={() => setStep((s) => s - 1)}>戻る</button>
         )}
         <button className="btn-primary" style={{ flex: 2 }} onClick={handleNext} disabled={!canNext() || saving}>
-          {saving ? "保存中..." : step === TOTAL_STEPS ? "パートナーに確認してもらう" : "次へ"}
+          {saving ? "保存中..." : step === TOTAL_STEPS
+            ? (isSolo ? "はじめる" : "パートナーに確認してもらう")
+            : "次へ"}
         </button>
       </div>
     </div>

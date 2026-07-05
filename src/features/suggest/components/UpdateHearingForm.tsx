@@ -11,9 +11,10 @@ interface Props {
   onChange: (h: Partial<Hearing>) => void;
   onSubmit: () => void;
   submitting: boolean;
+  isSolo?: boolean;
 }
 
-export const UpdateHearingForm = ({ hearing, onChange, onSubmit, submitting }: Props) => {
+export const UpdateHearingForm = ({ hearing, onChange, onSubmit, submitting, isSolo }: Props) => {
   const set = (key: keyof Hearing, value: string | string[] | undefined) =>
     onChange({ ...hearing, [key]: value } as Partial<Hearing>);
 
@@ -200,7 +201,7 @@ export const UpdateHearingForm = ({ hearing, onChange, onSubmit, submitting }: P
         </div>
       </FormSection>
 
-      <FormSection label="予算（1回・ふたり合計）">
+      <FormSection label={isSolo ? "予算（1回あたり）" : "予算（1回・ふたり合計）"}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           {BUDGET_OPTIONS.map((b) => (
             <ToggleChip key={b.id} selected={hearing.budget === b.id} onClick={() => set("budget", b.id)}>

@@ -2,14 +2,21 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/hooks/useAuth";
+import { usePair } from "../../../contexts/PairContext";
 import { getUserPairId } from "../../pair/services/pairService";
 import { db } from "../../../firebase/firestore";
 import { doc, collection, onSnapshot } from "firebase/firestore";
 
 export const CreatorWaitingPage = () => {
   const { user } = useAuth();
+  const { isSolo } = usePair();
   const navigate = useNavigate();
   const [pairId, setPairId] = useState<string | null>(null);
+
+  // ソロユーザーはこのページに来ない（HearingPage で swipe へ直行する）
+  useEffect(() => {
+    if (isSolo) navigate("/setup/swipe", { replace: true });
+  }, [isSolo, navigate]);
 
   useEffect(() => {
     if (!user) return;

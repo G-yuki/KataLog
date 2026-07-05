@@ -62,7 +62,7 @@ const fmtPeriod = (period: { from: Timestamp; to: Timestamp }): string => {
 
 export const MemoryPage = () => {
   const navigate = useNavigate();
-  const { pairId, loading: pairLoading } = usePair();
+  const { pairId, isSolo, loading: pairLoading } = usePair();
   const { items, loading } = useItems(pairId);
 
   const allDoneItems = items
@@ -381,7 +381,7 @@ export const MemoryPage = () => {
               </p>
               <p style={{ fontSize: 13, color: "var(--color-text-mid)", lineHeight: 1.7 }}>
                 リストのアイテムを体験したら<br />「完了」にチェックしましょう。<br />
-                AIがふたりの思い出を文章にしてくれます。
+                {isSolo ? "AIがあなたの思い出を文章にしてくれます。" : "AIがふたりの思い出を文章にしてくれます。"}
               </p>
               <div style={{ marginTop: 24, display: "flex", flexDirection: "column", gap: 10, alignItems: "center" }}>
                 <button onClick={() => navigate("/home")}
@@ -562,7 +562,7 @@ export const MemoryPage = () => {
                           <div style={{ height: 1, flex: 1, background: "var(--color-border)" }} />
                           <p style={{ fontSize: 10, color: "var(--color-accent)", letterSpacing: "0.12em",
                                       fontFamily: "var(--font-sans)", fontWeight: 500 }}>
-                            ふたりの思い出
+                            {isSolo ? "あなたの思い出" : "ふたりの思い出"}
                           </p>
                           <div style={{ height: 1, flex: 1, background: "var(--color-border)" }} />
                         </div>
@@ -768,13 +768,13 @@ export const MemoryPage = () => {
             <div style={{ textAlign: "center" }}>
               <p style={{ fontSize: 32, marginBottom: 8 }}>📖</p>
               <h2 style={{ fontSize: 17, fontWeight: 600, color: "var(--color-text-main)" }}>
-                思い出 — ふたりのかたログ — とは？
+                思い出 — {isSolo ? "あなた" : "ふたり"}のかたログ — とは？
               </h2>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {[
                 { icon: "🧠", text: "AIが過去の体験を文章でまとめます" },
-                { icon: "🎞️", text: "評価やメモをもとにふたりの思い出を振り返れます" },
+                { icon: "🎞️", text: isSolo ? "評価やメモをもとにあなたの思い出を振り返れます" : "評価やメモをもとにふたりの思い出を振り返れます" },
                 { icon: "📌", text: "気に入った思い出はかたちに変換して、いつでも見返せます！" },
               ].map(({ icon, text }) => (
                 <div key={icon} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>

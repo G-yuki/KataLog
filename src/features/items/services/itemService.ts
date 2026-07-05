@@ -369,6 +369,54 @@ export const finalizePairMatching = async (pairId: string): Promise<void> => {
   await batch.commit();
 };
 
+/**
+ * ソロマッチング処理（creatorSwipeのみで判定）
+ *
+ * ルール:
+ *   pass     → 除外
+ *   go       → matchTier: "go",   isWant: true
+ *   good     → matchTier: "good", isWant: false
+ */
+export const finalizeSoloMatching = async (pairId: string): Promise<void> => {
+  const pairRef     = doc(db, "pairs", pairId);
+  const pendingSnap = await getDocs(collection(db, "pairs", pairId, "pendingItems"));
+
+  const batch = writeBatch(db);
+  batch.update(pairRef, { matchingFinalized: true, matchingFinalizedAt: serverTimestamp() });
+
+  pendingSnap.docs.forEach((d) => {
+    const data = d.data();
+    const cs = data.creatorSwipe as SwipeAction | null;
+
+    if (!cs || cs === "pass") { batch.delete(d.ref); return; }
+
+    const matchTier: "go" | "good" = cs === "go" ? "go" : "good";
+    const itemRef = doc(collection(db, "pairs", pairId, "items"));
+    batch.set(itemRef, {
+      title:         data.title,
+      category:      data.category,
+      type:          data.type,
+      difficulty:    data.difficulty,
+      status:        "todo",
+      isWant:        matchTier === "go",
+      matchTier,
+      rating:        null,
+      memo:          null,
+      completedAt:   null,
+      ...(data.overseas   ? { overseas: data.overseas }    : {}),
+      ...(data.prefecture ? { prefecture: data.prefecture } : {}),
+      placeId:       null,
+      placeName:     null,
+      placeRating:   null,
+      placePhotoRef: null,
+      createdAt:     serverTimestamp(),
+    });
+    batch.delete(d.ref);
+  });
+
+  await batch.commit();
+};
+
 /** pendingItems をリアルタイム監視 */
 export const subscribePendingItems = (
   pairId: string,

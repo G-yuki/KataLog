@@ -1,5 +1,6 @@
 // src/features/setup/components/HomeGuide.tsx
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { usePair } from "../../../contexts/PairContext";
 
 type Phase = "home" | "detail";
 
@@ -28,6 +29,13 @@ export interface HomeGuideProps {
 }
 
 export const HomeGuide = ({ onClose, onOpenDetail, onCloseDetail, detailReady }: HomeGuideProps) => {
+  const { isSolo } = usePair();
+  const steps = useMemo(() => ALL_STEPS.map((s) =>
+    s.target === "nav-suggest" && isSolo
+      ? { ...s, desc: "おすすめ体験\nあなたに合う体験を提案" }
+      : s
+  ), [isSolo]);
+
   const [index, setIndex] = useState(0);
   const [rect, setRect] = useState<DOMRect | null>(null);
   const [waitingForDetail, setWaitingForDetail] = useState(false);
@@ -51,12 +59,12 @@ export const HomeGuide = ({ onClose, onOpenDetail, onCloseDetail, detailReady }:
 
   const handleTap = () => {
     const nextIndex = index + 1;
-    if (nextIndex >= ALL_STEPS.length) {
+    if (nextIndex >= steps.length) {
       onCloseDetail();
       setDone(true);
       return;
     }
-    const nextStep = ALL_STEPS[nextIndex];
+    const nextStep = steps[nextIndex];
     if (nextStep.phase === "detail" && !detailReady) {
       setIndex(nextIndex);
       setRect(null);
@@ -86,7 +94,7 @@ export const HomeGuide = ({ onClose, onOpenDetail, onCloseDetail, detailReady }:
           </h2>
           <p style={{ fontSize: 13, color: "var(--color-text-mid)", marginBottom: 24,
                       lineHeight: 1.8, fontFamily: "var(--font-sans)" }}>
-            ふたりのリストを<br />楽しんでください。
+            {isSolo ? "あなただけのリストを楽しんでください。" : <>ふたりのリストを<br />楽しんでください。</>}
           </p>
           <button onClick={onClose}
                   style={{ width: "100%", padding: "14px", background: "var(--color-primary)",
@@ -112,7 +120,7 @@ export const HomeGuide = ({ onClose, onOpenDetail, onCloseDetail, detailReady }:
   const descTop    = showBelow ? spotTop + spotH + 28 : undefined;
   const descBottom = !showBelow ? window.innerHeight - spotTop + 28 : undefined;
 
-  const current = ALL_STEPS[index];
+  const current = steps[index];
 
   return (
     <div
@@ -153,7 +161,7 @@ export const HomeGuide = ({ onClose, onOpenDetail, onCloseDetail, detailReady }:
         pointerEvents: "none",
       }}>
         <div style={{ display: "flex", gap: 6 }}>
-          {ALL_STEPS.map((_, i) => (
+          {steps.map((_, i) => (
             <div key={i} style={{
               width: i === index ? 20 : 6, height: 6, borderRadius: 3,
               background: i === index ? "#fff" : "rgba(255,255,255,0.35)",

@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/hooks/useAuth";
+import { usePair } from "../../../contexts/PairContext";
 import { Loading } from "../../../components/Loading";
 import { getUserPairId } from "../../pair/services/pairService";
 import {
@@ -9,6 +10,7 @@ import {
   saveCreatorSwipes,
   savePartnerSwipes,
   markSwipesDoneAndCheck,
+  finalizeSoloMatching,
 } from "../../items/services/itemService";
 import { SwipeTutorial } from "./SwipeTutorial";
 import { db } from "../../../firebase/firestore";
@@ -22,6 +24,7 @@ interface Props {
 
 export const SwipeScreen = ({ isPartner }: Props) => {
   const { user } = useAuth();
+  const { isSolo } = usePair();
   const navigate = useNavigate();
 
   const [pairId, setPairId] = useState<string | null>(null);
@@ -144,15 +147,23 @@ export const SwipeScreen = ({ isPartner }: Props) => {
       if (!pairId) return;
       setSaving(true);
       try {
-        if (isPartner) {
+        if (isSolo) {
+          // ソロ: creatorSwipe のみで即マッチング → ホームへ
+          await saveCreatorSwipes(pairId, results);
+          await finalizeSoloMatching(pairId);
+          navigate("/home", { replace: true });
+        } else if (isPartner) {
           await savePartnerSwipes(pairId, results);
+          await markSwipesDoneAndCheck(pairId, "partner");
+          setSaving(false);
+          setWaitingPartner(true);
         } else {
           await saveCreatorSwipes(pairId, results);
+          await markSwipesDoneAndCheck(pairId, "creator");
+          // CF (onPairSwipesComplete) がマッチングを実行する。items onSnapshot がリロードを検知する
+          setSaving(false);
+          setWaitingPartner(true);
         }
-        await markSwipesDoneAndCheck(pairId, isPartner ? "partner" : "creator");
-        // CF (onPairSwipesComplete) がマッチングを実行する。items onSnapshot がリロードを検知する
-        setSaving(false);
-        setWaitingPartner(true);
       } catch {
         setError("保存に失敗しました。もう一度お試しください。");
         setSaving(false);

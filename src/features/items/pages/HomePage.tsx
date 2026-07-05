@@ -54,9 +54,12 @@ function readCachedHomeState(): {
 
 export const HomePage = () => {
   const navigate = useNavigate();
-  const { pairId, loading: pairLoading } = usePair();
+  const { pairId, isSolo, loading: pairLoading } = usePair();
   const { user } = useAuth();
   const { items, loading } = useItems(pairId);
+  const [myName] = useState<string | null>(
+    () => localStorage.getItem("katalog_nickname")
+  );
   const [partnerName, setPartnerName] = useState<string | null>(
     () => localStorage.getItem("katalog_partner_name")
   );
@@ -528,7 +531,12 @@ export const HomePage = () => {
 
         {/* 共有状態 */}
         <div style={{ marginLeft: "auto", flexShrink: 0 }}>
-          {pairId ? (
+          {isSolo ? (
+            <span style={{ fontSize: 11, color: "var(--color-text-soft)",
+                           fontFamily: "var(--font-sans)", whiteSpace: "nowrap" }}>
+              {myName ? <><strong>{myName}</strong>さんのリスト</> : "マイリスト"}
+            </span>
+          ) : pairId ? (
             <span style={{ fontSize: 11, color: "var(--color-text-soft)",
                            fontFamily: "var(--font-sans)", whiteSpace: "nowrap" }}>
               {partnerName ? <><strong>{partnerName}</strong>さんと共有中</> : "共有中"}

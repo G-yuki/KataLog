@@ -60,7 +60,7 @@ export const SuggestPage = () => {
   const { generate } = useGenerateItems();
   const [genError, setGenError] = useState<string | null>(null);
 
-  const { pairId, loading: pairLoading } = usePair();
+  const { pairId, isSolo, loading: pairLoading } = usePair();
   const { user } = useAuth();
   const { items: existingItems } = useItems(pairId);
   const isDirectUpdate = (location.state as { step?: string } | null)?.step === "update-hearing";
@@ -265,9 +265,13 @@ export const SuggestPage = () => {
               </div>
               <p style={{ fontSize: 15, fontWeight: 500, color: "var(--color-text-main)",
                           lineHeight: 1.6 }}>
-                {myName != null && partnerName != null
-                  ? <>{myName}さんと{partnerName}さんに<br />ぴったりな体験を<br />新たに見つけましょう！</>
-                  : <>ふたりにぴったりな体験を<br />新たに見つけましょう！</>
+                {isSolo
+                  ? myName != null
+                    ? <>{myName}さんに<br />ぴったりな体験を<br />新たに見つけましょう！</>
+                    : <>あなたにぴったりな体験を<br />新たに見つけましょう！</>
+                  : myName != null && partnerName != null
+                    ? <>{myName}さんと{partnerName}さんに<br />ぴったりな体験を<br />新たに見つけましょう！</>
+                    : <>ふたりにぴったりな体験を<br />新たに見つけましょう！</>
                 }
               </p>
             </div>
@@ -359,6 +363,7 @@ export const SuggestPage = () => {
             onChange={setEditHearing}
             onSubmit={handleUpdatePlan}
             submitting={planSaving}
+            isSolo={isSolo}
           />
         )}
 

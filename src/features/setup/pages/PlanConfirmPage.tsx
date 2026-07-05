@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/hooks/useAuth";
+import { usePair } from "../../../contexts/PairContext";
 import { getUserPairId } from "../../pair/services/pairService";
 import { markPlanApproved, savePendingItemsDraft } from "../../items/services/itemService";
 import { useGenerateItems } from "../hooks/useGenerateItems";
@@ -15,8 +16,14 @@ import type { Hearing } from "../../../types";
 
 export const PlanConfirmPage = () => {
   const { user } = useAuth();
+  const { isSolo } = usePair();
   const navigate = useNavigate();
   const { generate } = useGenerateItems();
+
+  // ソロユーザーはこのページに来ない（HearingPage で swipe へ直行する）
+  useEffect(() => {
+    if (isSolo) navigate("/setup/swipe", { replace: true });
+  }, [isSolo, navigate]);
 
   const [pairId, setPairId] = useState<string | null>(null);
   const [finalHearing, setFinalHearing] = useState<Hearing | null>(null);
