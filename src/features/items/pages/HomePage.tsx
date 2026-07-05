@@ -146,9 +146,14 @@ export const HomePage = () => {
     const cached = sessionStorage.getItem(sessionKey);
     if (cached) {
       try {
-        setRegionalEvents(JSON.parse(cached) as RegionalEvent[]);
-        eventsFetchedForRef.current = fetchKey;
-        return;
+        const parsed = JSON.parse(cached) as RegionalEvent[];
+        if (parsed.length > 0) {
+          setRegionalEvents(parsed);
+          eventsFetchedForRef.current = fetchKey;
+          return;
+        }
+        // 空配列キャッシュは無効として削除し CF を再実行
+        sessionStorage.removeItem(sessionKey);
       } catch { /* ignore */ }
     }
 
@@ -162,11 +167,14 @@ export const HomePage = () => {
       .then((res) => {
         const events = res.data.events ?? [];
         setRegionalEvents(events);
-        try { sessionStorage.setItem(sessionKey, JSON.stringify(events)); } catch { /* ignore */ }
+        // 空配列はキャッシュしない（次回マウント時に再取得させる）
+        if (events.length > 0) {
+          try { sessionStorage.setItem(sessionKey, JSON.stringify(events)); } catch { /* ignore */ }
+        }
       })
       .catch((e) => console.warn("fetchRegionalEvents:", e))
       .finally(() => setEventsLoading(false));
-  }, [hearing?.prefecture, hearing?.overseas]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hearing?.prefecture, !!hearing?.overseas]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 手動追加モーダル
   const [showAddModal, setShowAddModal] = useState(false);
