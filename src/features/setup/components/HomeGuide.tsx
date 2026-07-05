@@ -10,12 +10,14 @@ interface StepDef {
 }
 
 const ALL_STEPS: StepDef[] = [
-  { target: "filter-area", desc: "カテゴリで\nアイテムを絞り込み",            phase: "home" },
-  { target: "sort-select", desc: "おすすめ順に並び替え\nプランとの相性でソート", phase: "home" },
-  { target: "search-area", desc: "キーワードで\nアイテムを検索",               phase: "home" },
-  { target: "add-btn",     desc: "新しく\nアイテムを追加 ＋",                 phase: "home" },
-  { target: "heart-btn",   desc: "❤️ をタップして\nお気に入りへ移動",          phase: "detail" },
-  { target: "done-btn",    desc: "体験したら\n完了チェック ✅",                phase: "detail" },
+  { target: "filter-area",  desc: "カテゴリで\nアイテムを絞り込み",              phase: "home" },
+  { target: "sort-select",  desc: "並び替え\nおすすめ順に表示",  phase: "home" },
+  { target: "search-area",  desc: "キーワードで\nアイテムを検索",                 phase: "home" },
+  { target: "add-btn",      desc: "新しく\nアイテムを追加 ＋",                   phase: "home" },
+  { target: "nav-suggest",  desc: "おすすめ体験\nふたりに合う体験を提案",     phase: "home" },
+  { target: "nav-memory",   desc: "かたログ\n体験した思い出をかたちに残す",         phase: "home" },
+  { target: "heart-btn",    desc: "❤️ をタップして\nお気に入りへ移動",            phase: "detail" },
+  { target: "done-btn",     desc: "体験したら\n完了チェック ✅",                  phase: "detail" },
 ];
 
 export interface HomeGuideProps {

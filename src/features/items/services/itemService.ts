@@ -104,7 +104,8 @@ export const resetPairList = async (pairId: string): Promise<void> => {
 export const addSuggestedItems = async (
   pairId: string,
   drafts: import("../../../types").ItemDraft[],
-  area?: { prefecture?: string; overseas?: string }
+  area?: { prefecture?: string; overseas?: string },
+  matchTier: "good" | "try" = "good"
 ): Promise<void> => {
   const batch = writeBatch(db);
   drafts.forEach((draft) => {
@@ -113,7 +114,7 @@ export const addSuggestedItems = async (
       ...draft,
       status: "todo",
       isWant: false,
-      matchTier: "good",
+      matchTier,
       rating: null,
       memo: null,
       completedAt: null,

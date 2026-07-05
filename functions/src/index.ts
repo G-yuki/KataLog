@@ -508,13 +508,14 @@ export const fetchRegionalEvents = onCall(
     const cacheKey = `${prefecture}_${dateFrom}`;
     const cacheRef = admin.firestore().collection("eventCache").doc(cacheKey);
 
-    // キャッシュ確認
+    // キャッシュ確認（空配列は無効キャッシュとして再取得する）
     const cached = await cacheRef.get();
     if (cached.exists) {
       const cacheData = cached.data()!;
       const expiresAt = cacheData.expiresAt as admin.firestore.Timestamp;
-      if (expiresAt.toMillis() > Date.now()) {
-        return { events: cacheData.events };
+      const cachedEvents = (cacheData.events as unknown[]) ?? [];
+      if (expiresAt.toMillis() > Date.now() && cachedEvents.length > 0) {
+        return { events: cachedEvents };
       }
     }
 
@@ -527,43 +528,76 @@ export const fetchRegionalEvents = onCall(
     });
 
     const prompt =
-      `${prefecture}で${dateFrom}から${dateTo}にかけて開催される実際のイベントを最大10件、` +
+      `${prefecture}で${dateFrom}から${dateTo}の期間中に開催される実際のイベントを最大15件、` +
       `以下のJSON配列のみで回答してください。` +
       `マークダウン・コードブロック・説明文は一切不要です。JSONのみ出力してください。\n\n` +
-      `[{"title":"イベント名","date":"YYYY-MM-DD","location":"会場名","category":"art|music|nature|gourmet|sports|movie|book|cafe|theme|onsen|other","description":"一言説明","url":"イベントページURL"}]\n\n` +
-      `ルール：実在するイベントのみ記載し確認できないものは含めない。オンラインイベントは除外する。URLが不明な場合はurlフィールドを省略する。`;
+      `[{"title":"イベント名","date":"YYYY-MM-DD","endDate":"YYYY-MM-DD","location":"会場名","category":"art|music|nature|gourmet|sports|movie|book|cafe|theme|onsen|other","description":"一言説明","url":"イベントページURL"}]\n\n` +
+      `ルール：${dateFrom}〜${dateTo}の各日程に偏りなくイベントを含めること。実在するイベントのみ記載し確認できないものは含めない。オンラインイベントは除外する。URLが不明な場合はurlフィールドを省略する。複数日にわたるイベントはdateに開始日、endDateに終了日を記載すること。単日のイベントはendDateを省略してよい。`;
 
     const result = await model.generateContent(prompt);
     const text   = result.response.text();
 
-    // JSON配列を抽出（コードブロックに包まれていても対応）
+    // Gemini のグラウンディングレスポンスには [1][2] 等の引用符が混入するため
+    // greedy regex ではなくブラケットカウントで最初の JSON 配列を抽出する
     interface EventEntry {
       title?: string;
       date?: string;
+      endDate?: string;
       location?: string;
       category?: string;
       description?: string;
       url?: string;
     }
+
+    function extractFirstJsonArray(src: string): unknown[] | null {
+      // コードブロック内を優先
+      const codeBlock = src.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      if (codeBlock) {
+        try {
+          const p = JSON.parse(codeBlock[1]);
+          if (Array.isArray(p)) return p;
+        } catch { /* fall through */ }
+      }
+      // [{ で始まる最初の配列をブラケットカウントで抽出
+      const start = src.indexOf("[{");
+      if (start === -1) return null;
+      let depth = 0;
+      for (let i = start; i < src.length; i++) {
+        if (src[i] === "[") depth++;
+        else if (src[i] === "]") {
+          depth--;
+          if (depth === 0) {
+            try {
+              const p = JSON.parse(src.slice(start, i + 1));
+              return Array.isArray(p) ? p : null;
+            } catch { return null; }
+          }
+        }
+      }
+      return null;
+    }
+
     let events: EventEntry[] = [];
     try {
-      const jsonMatch = text.match(/\[[\s\S]*\]/);
-      if (jsonMatch) {
-        const parsed: unknown = JSON.parse(jsonMatch[0]);
-        if (Array.isArray(parsed)) {
-          events = (parsed as EventEntry[])
-            .filter((e) => e.title && e.date && e.location && e.category)
-            .slice(0, 10);
-        }
+      const parsed = extractFirstJsonArray(text);
+      if (parsed) {
+        events = (parsed as EventEntry[])
+          .filter((e) => e.title && e.date && e.location && e.category)
+          .sort((a, b) => (a.date ?? "").localeCompare(b.date ?? ""))
+          .slice(0, 15);
+      } else {
+        console.warn("fetchRegionalEvents: no JSON array found in response");
       }
     } catch (e) {
       console.warn("fetchRegionalEvents: JSON parse failed", e, text);
     }
 
-    // Firestoreにキャッシュ保存（24h TTL）
-    const now = admin.firestore.Timestamp.now();
-    const expiresAt = new admin.firestore.Timestamp(now.seconds + 24 * 60 * 60, 0);
-    await cacheRef.set({ events, fetchedAt: now, expiresAt });
+    // イベントがある場合のみキャッシュ保存（空配列はキャッシュしない）
+    if (events.length > 0) {
+      const now = admin.firestore.Timestamp.now();
+      const expiresAt = new admin.firestore.Timestamp(now.seconds + 24 * 60 * 60, 0);
+      await cacheRef.set({ events, fetchedAt: now, expiresAt });
+    }
 
     return { events };
   }
@@ -607,6 +641,4 @@ export const onItemDeleted = onDocumentDeleted(
     }));
   }
 );
-
-
 

@@ -1,6 +1,7 @@
 // src/features/items/pages/HomePage.tsx
 import { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../auth/hooks/useAuth";
 import { useItems } from "../hooks/useItems";
 import { Loading } from "../../../components/Loading";
 import { getDisplayName } from "../../pair/services/pairService";
@@ -21,6 +22,17 @@ import type { Item, Category, ItemType, ItemStatus, Hearing, RegionalEvent } fro
 
 // 地域イベントのモジュールレベルキャッシュ（リマウントをまたいで保持）
 let _eventsModuleCache: { key: string; data: RegionalEvent[] } | null = null;
+
+const DOW_JA = ["日","月","火","水","木","金","土"] as const;
+function fmtEventDate(date: string, endDate?: string): string {
+  const fmt = (d: string) => {
+    const [y, m, day] = d.split("-").map(Number);
+    const dow = DOW_JA[new Date(y, m - 1, day).getDay()];
+    return `${m}/${day}（${dow}）`;
+  };
+  if (!endDate || endDate === date) return fmt(date);
+  return `${fmt(date)}〜${fmt(endDate)}`;
+}
 
 // sessionStorage から home_state を同期読み込み（pairId 不要の先頭一致サーチ）
 function readCachedHomeState(): {
@@ -43,7 +55,31 @@ function readCachedHomeState(): {
 export const HomePage = () => {
   const navigate = useNavigate();
   const { pairId, loading: pairLoading } = usePair();
+  const { user } = useAuth();
   const { items, loading } = useItems(pairId);
+  const [partnerName, setPartnerName] = useState<string | null>(
+    () => localStorage.getItem("katalog_partner_name")
+  );
+
+  useEffect(() => {
+    if (!pairId || !user) return;
+    try {
+      const cached = sessionStorage.getItem(`suggest_names_${pairId}`);
+      if (cached) {
+        const { partnerName: n } = JSON.parse(cached) as { partnerName?: string | null };
+        if (n) { setPartnerName(n); localStorage.setItem("katalog_partner_name", n); return; }
+      }
+    } catch { /* ignore */ }
+    getDoc(doc(db, "pairs", pairId)).then((snap) => {
+      if (!snap.exists()) return;
+      const members = (snap.data().members as string[]) ?? [];
+      const uid = members.find((m) => m !== user.uid);
+      if (uid) getDisplayName(uid).then((name) => {
+        setPartnerName(name);
+        if (name) localStorage.setItem("katalog_partner_name", name);
+      });
+    });
+  }, [pairId, user]);
 
   const [selectedCategories, setSelectedCategories] = useState<Category[]>(
     () => readCachedHomeState().selectedCategories ?? []
@@ -81,15 +117,14 @@ export const HomePage = () => {
   const [guideDetailOpen, setGuideDetailOpen] = useState(false);
   const [regionalEvents, setRegionalEvents] = useState<RegionalEvent[]>(() => {
     // docs/progress/bn-events-debug.md 参照
-    // hearing チェックより先にモジュールキャッシュを確認する（hearing=null でもイベントを復元）
     const today = new Date().toISOString().split("T")[0];
 
-    // 1. モジュールキャッシュ最優先（hearing 不要・今日のデータなら即返す）
+    // 1. モジュールキャッシュ最優先
     if (_eventsModuleCache?.key.endsWith(`_${today}`) && _eventsModuleCache.data.length > 0) {
       return _eventsModuleCache.data;
     }
 
-    // 2. sessionStorage フォールバック（hearing が確認できる場合のみ）
+    // 2. sessionStorage フォールバック
     const h = readCachedHomeState().hearing;
     if (!h?.prefecture || h.overseas) return [];
     const key = `${h.prefecture}_${today}`;
@@ -97,7 +132,10 @@ export const HomePage = () => {
       const c = sessionStorage.getItem(`events_${key}`);
       if (c) {
         const parsed = JSON.parse(c) as RegionalEvent[];
-        if (parsed.length > 0) { _eventsModuleCache = { key, data: parsed }; return parsed; }
+        if (parsed.length > 0) {
+          _eventsModuleCache = { key, data: parsed };
+          return parsed;
+        }
       }
     } catch { /* ignore */ }
     return [];
@@ -193,7 +231,7 @@ export const HomePage = () => {
           try { sessionStorage.setItem(sessionKey, JSON.stringify(events)); } catch { /* ignore */ }
         }
       })
-      .catch((e) => console.warn("fetchRegionalEvents:", e))
+      .catch((e) => console.warn("[events] CF error:", e))
       .finally(() => setEventsLoading(false));
   }, [hearing?.prefecture, !!hearing?.overseas]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -218,9 +256,16 @@ export const HomePage = () => {
   const [addSaving, setAddSaving] = useState(false);
   const [addedToast, setAddedToast] = useState(false);
   const modalContentRef = useRef<HTMLDivElement>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const dragHandleRef = useRef<HTMLDivElement>(null);
   const touchStartY = useRef(0);
+  const dragOffsetRef = useRef(0);
 
   const closeAddModal = () => {
+    if (sheetRef.current) {
+      sheetRef.current.style.transition = "none";
+      sheetRef.current.style.transform = "";
+    }
     setShowAddModal(false);
     if (window.history.state?.modal === "add") window.history.back();
   };
@@ -233,12 +278,42 @@ export const HomePage = () => {
     return () => window.removeEventListener("popstate", handlePop);
   }, [showAddModal]);
 
+  // touchmove はネイティブリスナーで passive:false + preventDefault()（iOS Safari 対応）
+  useEffect(() => {
+    const el = dragHandleRef.current;
+    if (!el || !showAddModal) return;
+    const onMove = (e: TouchEvent) => {
+      e.preventDefault();
+      const delta = e.touches[0].clientY - touchStartY.current;
+      const offset = Math.max(0, delta);
+      dragOffsetRef.current = offset;
+      if (sheetRef.current) sheetRef.current.style.transform = `translateY(${offset}px)`;
+    };
+    el.addEventListener("touchmove", onMove, { passive: false });
+    return () => el.removeEventListener("touchmove", onMove);
+  }, [showAddModal]);
+
   const handleModalTouchStart = (e: React.TouchEvent) => {
     touchStartY.current = e.touches[0].clientY;
+    dragOffsetRef.current = 0;
+    if (sheetRef.current) sheetRef.current.style.transition = "none";
   };
-  const handleModalTouchEnd = (e: React.TouchEvent) => {
-    const delta = e.changedTouches[0].clientY - touchStartY.current;
-    if (delta > 60 && (modalContentRef.current?.scrollTop ?? 0) === 0) closeAddModal();
+  const handleModalTouchEnd = () => {
+    const offset = dragOffsetRef.current;
+    const sheet = sheetRef.current;
+    if (!sheet) return;
+    if (offset > 80 && (modalContentRef.current?.scrollTop ?? 0) === 0) {
+      sheet.style.transition = "transform 0.25s ease";
+      sheet.style.transform = "translateY(100%)";
+      sheet.addEventListener("transitionend", () => {
+        setShowAddModal(false);
+        if (window.history.state?.modal === "add") window.history.back();
+      }, { once: true });
+    } else {
+      sheet.style.transition = "transform 0.2s ease";
+      sheet.style.transform = "translateY(0)";
+      dragOffsetRef.current = 0;
+    }
   };
 
   const resetAddModal = () => {
@@ -341,18 +416,15 @@ export const HomePage = () => {
                   background: "var(--color-bg)" }}>
 
       {/* ── ヘッダー ── */}
-      <header style={{ flexShrink: 0, padding: "14px 20px 10px",
+      <header style={{ flexShrink: 0, padding: "12px 20px 10px",
                        background: "var(--color-bg)", borderBottom: "1px solid rgba(0,0,0,0.07)",
                        position: "sticky", top: 0, zIndex: 20 }}>
-        {/* 左: タイトル + ペア名 ／ 右: ロゴ */}
-        <div style={{ display: "flex", alignItems: "flex-start" }}>
-          <div style={{ flex: 1 }}>
-            <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 17, fontWeight: 600,
-                         color: "var(--color-text-main)", letterSpacing: "0.01em" }}>
-              ホーム
-            </h1>
-          </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <img src="/logo.png" alt="KataLog" style={{ height: 20, objectFit: "contain" }} />
+          <span style={{ fontFamily: "var(--font-serif)", fontSize: 11,
+                         color: "var(--color-text-soft)", letterSpacing: "0.04em" }}>
+            思い出を、かたちに。
+          </span>
         </div>
       </header>
 
@@ -453,6 +525,24 @@ export const HomePage = () => {
             </>
           )}
         </div>
+
+        {/* 共有状態 */}
+        <div style={{ marginLeft: "auto", flexShrink: 0 }}>
+          {pairId ? (
+            <span style={{ fontSize: 11, color: "var(--color-text-soft)",
+                           fontFamily: "var(--font-sans)", whiteSpace: "nowrap" }}>
+              {partnerName ? <><strong>{partnerName}</strong>さんと共有中</> : "共有中"}
+            </span>
+          ) : (
+            <button onClick={() => navigate("/pair")}
+                    style={{ fontSize: 11, color: "var(--color-primary)",
+                             fontFamily: "var(--font-sans)", background: "none",
+                             border: "none", cursor: "pointer", padding: 0,
+                             whiteSpace: "nowrap" }}>
+              共有相手を招待
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ── 検索窓 ── */}
@@ -481,7 +571,7 @@ export const HomePage = () => {
       </div>
 
       {/* ── スクロールエリア ── */}
-      <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", scrollbarWidth: "none", paddingBottom: 80 }}>
+      <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", scrollbarWidth: "none", paddingBottom: "calc(160px + env(safe-area-inset-bottom, 0px))" }}>
 
         {/* お気に入りセクション */}
         {sortedGoItems.length > 0 && (
@@ -547,6 +637,13 @@ export const HomePage = () => {
                              fontFamily: "var(--font-sans)" }}>
                 {hearing?.prefecture}
               </span>
+              <button
+                onClick={() => navigate("/suggest", { state: { step: "update-hearing" } })}
+                style={{ marginLeft: "auto", fontSize: 11, color: "var(--color-primary)",
+                         background: "none", border: "none", cursor: "pointer", padding: 0,
+                         fontFamily: "var(--font-sans)", whiteSpace: "nowrap" }}>
+                地域を変更 <span style={{ fontSize: 16, lineHeight: 1 }}>›</span>
+              </button>
             </div>
             {eventsLoading && regionalEvents.length === 0 ? (
               <div style={{ padding: "12px 20px", fontSize: 12, color: "var(--color-text-soft)",
@@ -567,7 +664,7 @@ export const HomePage = () => {
                          onClick={() => window.open(searchUrl, "_blank", "noopener,noreferrer")}
                          style={{
                            flexShrink: 0,
-                           width: 160,
+                           width: "calc(50vw - 25px)",
                            borderRadius: 12,
                            background: catStyle.bg,
                            padding: "12px 12px 10px",
@@ -585,7 +682,11 @@ export const HomePage = () => {
                       </div>
                       <div style={{ fontSize: 10, color: "rgba(255,255,255,0.75)",
                                    fontFamily: "var(--font-sans)", marginTop: 2 }}>
-                        {ev.date} · {ev.location}
+                        {fmtEventDate(ev.date, ev.endDate)}
+                      </div>
+                      <div style={{ fontSize: 10, color: "rgba(255,255,255,0.8)",
+                                   fontFamily: "var(--font-sans)" }}>
+                        {ev.location}
                       </div>
                       <div style={{ fontSize: 10, color: "rgba(255,255,255,0.55)",
                                    fontFamily: "var(--font-sans)" }}>
@@ -663,7 +764,7 @@ export const HomePage = () => {
       {/* ── 追加しましたトースト ── */}
       {addedToast && (
         <div style={{
-          position: "fixed", bottom: 96, left: "50%", transform: "translateX(-50%)",
+          position: "fixed", bottom: "calc(96px + env(safe-area-inset-bottom, 0px))", left: "50%", transform: "translateX(-50%)",
           background: "rgba(30,30,30,0.88)", color: "#fff",
           borderRadius: 24, padding: "10px 22px",
           fontSize: 13, fontWeight: 500, fontFamily: "var(--font-sans)",
@@ -677,7 +778,7 @@ export const HomePage = () => {
       {/* ── 追加FAB ── */}
       <button data-guide="add-btn"
               onClick={() => setShowAddModal(true)}
-              style={{ position: "fixed", bottom: 88, right: 16, zIndex: 30,
+              style={{ position: "fixed", bottom: "calc(88px + env(safe-area-inset-bottom, 0px))", right: 16, zIndex: 30,
                        height: 44, borderRadius: 22, padding: "0 20px",
                        background: "#fff", color: "#222",
                        border: "1.5px solid var(--color-accent)",
@@ -719,14 +820,16 @@ export const HomePage = () => {
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
                       display: "flex", alignItems: "flex-end", zIndex: 100 }}
              onClick={closeAddModal}>
-          <div onClick={(e) => e.stopPropagation()}
+          <div ref={sheetRef}
+               onClick={(e) => e.stopPropagation()}
                style={{ width: "100%", background: "var(--color-bg)", borderRadius: "20px 20px 0 0",
                         display: "flex", flexDirection: "column", maxHeight: "90dvh",
                         overflow: "hidden" }}>
             {/* ドラッグハンドル（スワイプ判定はここだけ） */}
-            <div onTouchStart={handleModalTouchStart}
+            <div ref={dragHandleRef}
+                 onTouchStart={handleModalTouchStart}
                  onTouchEnd={handleModalTouchEnd}
-                 style={{ display: "flex", justifyContent: "center", padding: "12px 20px 8px",
+                 style={{ display: "flex", justifyContent: "center", padding: "18px 20px 16px",
                           flexShrink: 0, touchAction: "none" }}>
               <div style={{ width: 36, height: 4, borderRadius: 2,
                             background: "rgba(0,0,0,0.15)" }} />
@@ -1160,16 +1263,19 @@ const GoodCard = ({ item, onTap, breakdown, onScoreTap }:
                     pointerEvents: "none" }} />
       {/* For You バッジ（70%以上のみ） */}
       {breakdown !== undefined && breakdown.total >= 70 && (
-        <button
+        <div
+          role="button"
+          tabIndex={0}
           onClick={(e) => { e.stopPropagation(); onScoreTap?.(); }}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.stopPropagation(); onScoreTap?.(); } }}
           style={{ position: "absolute", top: 8, right: 8, zIndex: 3,
                    background: "rgba(0,0,0,0.6)",
                    borderRadius: 20, padding: "3px 9px",
                    fontSize: 10, color: "#fff", fontWeight: 700,
                    fontFamily: "var(--font-sans)", letterSpacing: "0.03em",
-                   border: "none", cursor: "pointer", whiteSpace: "nowrap" }}>
+                   cursor: "pointer", whiteSpace: "nowrap" }}>
           ✨ For You
-        </button>
+        </div>
       )}
       <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 2,
                     padding: "8px 10px 9px 10px", textAlign: "left" }}>

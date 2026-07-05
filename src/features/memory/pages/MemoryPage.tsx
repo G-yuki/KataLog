@@ -289,15 +289,21 @@ export const MemoryPage = () => {
                   background: "var(--color-bg)", fontFamily: "var(--font-sans)" }}>
 
       {/* ヘッダー */}
-      <header style={{ flexShrink: 0, padding: "14px 20px 0",
+      <header style={{ flexShrink: 0, padding: "12px 20px 0",
                        background: "var(--color-bg)", position: "sticky", top: 0, zIndex: 20 }}>
         <div style={{ display: "flex", alignItems: "center", paddingBottom: 10,
                       borderBottom: "1px solid rgba(0,0,0,0.07)" }}>
-          <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 17, fontWeight: 600,
-                       color: "var(--color-text-main)", letterSpacing: "0.01em" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <img src="/logo.png" alt="KataLog" style={{ height: 20, objectFit: "contain" }} />
+            <span style={{ fontFamily: "var(--font-serif)", fontSize: 11,
+                           color: "var(--color-text-soft)", letterSpacing: "0.04em" }}>
+              思い出を、かたちに。
+            </span>
+          </div>
+          <h1 style={{ marginLeft: "auto", fontFamily: "var(--font-serif)", fontSize: 17,
+                       fontWeight: 600, color: "var(--color-text-main)", letterSpacing: "0.01em" }}>
             かたログ
           </h1>
-          <img src="/logo.png" alt="KataLog" style={{ marginLeft: "auto", height: 20, objectFit: "contain" }} />
         </div>
 
         {/* サブタブ */}

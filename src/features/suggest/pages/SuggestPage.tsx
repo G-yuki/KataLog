@@ -1,6 +1,6 @@
 // src/features/suggest/pages/SuggestPage.tsx
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Loading } from "../../../components/Loading";
 import { BottomNav } from "../../../components/BottomNav";
 import { useGenerateItems } from "../../setup/hooks/useGenerateItems";
@@ -18,7 +18,7 @@ import {
 import type { Hearing, ItemDraft } from "../../../types";
 import { UpdateHearingForm } from "../components/UpdateHearingForm";
 
-type Step = "home" | "update-hearing" | "generating" | "results" | "done";
+type Step = "home" | "update-hearing" | "generating" | "results" | "results2" | "done";
 
 function readCachedHearing(): Hearing | null {
   try {
@@ -56,13 +56,15 @@ const INDOOR_LABELS    = toMap(INDOOR_OPTIONS);
 
 export const SuggestPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { generate } = useGenerateItems();
   const [genError, setGenError] = useState<string | null>(null);
 
   const { pairId, loading: pairLoading } = usePair();
   const { user } = useAuth();
   const { items: existingItems } = useItems(pairId);
-  const [step, setStep] = useState<Step>("home");
+  const isDirectUpdate = (location.state as { step?: string } | null)?.step === "update-hearing";
+  const [step, setStep] = useState<Step>(() => isDirectUpdate ? "update-hearing" : "home");
   const stepRef = useRef<Step>("home");
   stepRef.current = step;
 
@@ -84,6 +86,9 @@ export const SuggestPage = () => {
   const [editHearing, setEditHearing] = useState<Partial<Hearing>>({});
   const [suggestions, setSuggestions] = useState<ItemDraft[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [round1SelectedSet, setRound1SelectedSet] = useState<Set<number>>(new Set());
+  const [selected2, setSelected2] = useState<Set<number>>(new Set());
+  const [addedCount, setAddedCount] = useState(0);
   const [saving, setSaving] = useState(false);
   const [planSaving, setPlanSaving] = useState(false);
   const [initLoading, setInitLoading] = useState(() => readCachedHearing() === null);
@@ -163,17 +168,50 @@ export const SuggestPage = () => {
     });
   };
 
+  const toggleSelect2 = (i: number) => {
+    setSelected2((prev) => {
+      const next = new Set(prev);
+      next.has(i) ? next.delete(i) : next.add(i);
+      return next;
+    });
+  };
+
+  const buildArea = () => {
+    const isZenkoku = hearing?.range === "anywhere" || hearing?.prefecture === "全国";
+    return hearing?.overseas
+      ? { overseas: hearing.overseas }
+      : { prefecture: isZenkoku ? "全国" : hearing?.prefecture };
+  };
+
   const handleAdd = async () => {
     if (!pairId || selected.size === 0) return;
     setSaving(true);
     const drafts = [...selected].map((i) => suggestions[i]);
-    const isZenkoku = hearing?.range === "anywhere" || hearing?.prefecture === "全国";
-    const area = hearing?.overseas
-      ? { overseas: hearing.overseas }
-      : { prefecture: isZenkoku ? "全国" : hearing?.prefecture };
-    await addSuggestedItems(pairId, drafts, area);
+    await addSuggestedItems(pairId, drafts, buildArea(), "good");
     updateDoc(doc(db, "pairs", pairId), { pendingSuggestions: deleteField() }).catch(() => {});
+    const count = selected.size;
+    setRound1SelectedSet(new Set(selected));
+    setAddedCount(count);
     setSaving(false);
+    const unselectedCount = suggestions.length - count;
+    if (unselectedCount > 0) {
+      setSelected2(new Set());
+      setStep("results2");
+    } else {
+      setStep("done");
+    }
+  };
+
+  const handleAdd2 = async (skip: boolean) => {
+    if (!pairId) return;
+    if (!skip && selected2.size > 0) {
+      setSaving(true);
+      const round2Items = suggestions.filter((_, i) => !round1SelectedSet.has(i));
+      const drafts = [...selected2].map((i) => round2Items[i]);
+      await addSuggestedItems(pairId, drafts, buildArea(), "try");
+      setAddedCount((prev) => prev + selected2.size);
+      setSaving(false);
+    }
     setStep("done");
   };
 
@@ -185,13 +223,13 @@ export const SuggestPage = () => {
 
       {/* ヘッダー */}
       <header style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 12,
-                       padding: "14px 20px 10px",
+                       padding: "12px 20px 10px",
                        borderBottom: "1px solid rgba(0,0,0,0.07)",
                        position: "sticky", top: 0, zIndex: 20,
                        background: "var(--color-bg)" }}>
         {(step === "update-hearing" || step === "results") && (
           <button
-            onClick={() => setStep("home")}
+            onClick={() => isDirectUpdate && step === "update-hearing" ? navigate(-1) : setStep("home")}
             style={{ background: "none", border: "none", cursor: "pointer",
                      padding: "4px 8px 4px 0", color: "var(--color-text-mid)" }}>
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -200,11 +238,20 @@ export const SuggestPage = () => {
             </svg>
           </button>
         )}
-        <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 17, fontWeight: 600, color: "var(--color-text-main)",
-                     letterSpacing: "0.01em" }}>
-          {step === "update-hearing" ? "プランを更新" : "おすすめ体験"}
+        {step === "results2" && (
+          <div style={{ width: 26, flexShrink: 0 }} />
+        )}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <img src="/logo.png" alt="KataLog" style={{ height: 20, objectFit: "contain" }} />
+          <span style={{ fontFamily: "var(--font-serif)", fontSize: 11,
+                         color: "var(--color-text-soft)", letterSpacing: "0.04em" }}>
+            思い出を、かたちに。
+          </span>
+        </div>
+        <h1 style={{ marginLeft: "auto", fontFamily: "var(--font-serif)", fontSize: 17,
+                     fontWeight: 600, color: "var(--color-text-main)", letterSpacing: "0.01em" }}>
+          {step === "update-hearing" ? "プランを更新" : step === "results2" ? "試してみる？" : "おすすめ体験"}
         </h1>
-        <img src="/logo.png" alt="KataLog" style={{ marginLeft: "auto", height: 20, objectFit: "contain" }} />
       </header>
 
       <div style={{ flex: 1, overflowY: "auto", scrollbarWidth: "none", paddingBottom: 80 }}>
@@ -382,6 +429,67 @@ export const SuggestPage = () => {
           </div>
         )}
 
+        {/* ── ラウンド2：あとで試す ── */}
+        {step === "results2" && (() => {
+          const round2Items = suggestions.filter((_, i) => !round1SelectedSet.has(i));
+          return (
+            <div style={{ padding: "16px 20px 160px" }}>
+              <p style={{ fontSize: 13, color: "var(--color-text-mid)", marginBottom: 4,
+                          lineHeight: 1.6 }}>
+                選ばなかった体験を「試してみる？」リストに追加できます。
+              </p>
+              <p style={{ fontSize: 12, color: "var(--color-text-soft)", marginBottom: 16,
+                          lineHeight: 1.6 }}>
+                ピンときたものがあればタップしてください。スキップもできます。
+              </p>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                {round2Items.map((item, i) => {
+                  const s = CATEGORY_STYLE[item.category] ?? CATEGORY_STYLE["other"];
+                  const isSelected = selected2.has(i);
+                  return (
+                    <button key={i} onClick={() => toggleSelect2(i)}
+                            style={{ position: "relative", height: 130, borderRadius: 12,
+                                     overflow: "hidden", border: isSelected
+                                       ? "2.5px solid var(--color-accent)"
+                                       : "2.5px solid transparent",
+                                     cursor: "pointer", padding: 0 }}>
+                      <div style={{ position: "absolute", inset: 0, background: s.bg }} />
+                      <div style={{ position: "absolute", inset: 0, display: "flex",
+                                    alignItems: "center", justifyContent: "center" }}>
+                        <span style={{ fontSize: 36, opacity: 0.75,
+                                       filter: "drop-shadow(0 2px 8px rgba(0,0,0,0.4))" }}>
+                          {s.emoji}
+                        </span>
+                      </div>
+                      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 64,
+                                    background: "linear-gradient(to top, rgba(0,0,0,0.75), transparent)",
+                                    pointerEvents: "none" }} />
+                      {isSelected && (
+                        <div style={{ position: "absolute", top: 8, right: 8,
+                                      width: 20, height: 20, borderRadius: "50%",
+                                      background: "var(--color-accent)",
+                                      display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                            <path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="1.5"
+                                  strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </div>
+                      )}
+                      <p style={{ position: "absolute", bottom: 0, left: 0, right: 0,
+                                  padding: "8px 10px 9px", fontSize: 10, fontWeight: 500,
+                                  color: "#fff", lineHeight: 1.35, fontFamily: "var(--font-sans)",
+                                  display: "-webkit-box", WebkitLineClamp: 1,
+                                  WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                        {item.title}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* ── 完了 ── */}
         {step === "done" && (
           <div style={{ height: "100%", display: "flex", flexDirection: "column",
@@ -392,7 +500,7 @@ export const SuggestPage = () => {
               追加しました！
             </h2>
             <p style={{ fontSize: 13, color: "var(--color-text-mid)", lineHeight: 1.8 }}>
-              {selected.size}件のアイテムをリストに追加しました。
+              {addedCount}件のアイテムをリストに追加しました。
             </p>
             <button onClick={() => navigate("/home")}
                     style={{ marginTop: 24, padding: "14px 32px",
@@ -442,7 +550,7 @@ export const SuggestPage = () => {
         </div>
       )}
 
-      {/* 追加ボタン（results ステップのみ） BottomNavの上に配置 */}
+      {/* 追加ボタン（results / results2 ステップ） BottomNavの上に配置 */}
       {step === "results" && (
         <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 40,
                       padding: "16px 20px 80px",
@@ -458,6 +566,31 @@ export const SuggestPage = () => {
             {saving ? "追加中..." : selected.size > 0
               ? `${selected.size}件をリストに追加する`
               : "アイテムを選択してください"}
+          </button>
+        </div>
+      )}
+      {step === "results2" && (
+        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 40,
+                      padding: "12px 20px 80px",
+                      background: "linear-gradient(to top, var(--color-bg) 80%, transparent)" }}>
+          <button onClick={() => handleAdd2(false)} disabled={selected2.size === 0 || saving}
+                  style={{ width: "100%", padding: "15px",
+                           background: selected2.size > 0 ? "var(--color-accent)" : "rgba(0,0,0,0.1)",
+                           color: selected2.size > 0 ? "#fff" : "var(--color-text-soft)",
+                           border: "none", borderRadius: 14, fontSize: 15, fontWeight: 600,
+                           cursor: selected2.size > 0 ? "pointer" : "default",
+                           fontFamily: "var(--font-sans)",
+                           transition: "background 0.2s", marginBottom: 8 }}>
+            {saving ? "追加中..." : selected2.size > 0
+              ? `${selected2.size}件を「試してみる？」に追加`
+              : "追加したい体験を選んでください"}
+          </button>
+          <button onClick={() => handleAdd2(true)} disabled={saving}
+                  style={{ width: "100%", padding: "13px",
+                           background: "transparent", color: "var(--color-text-mid)",
+                           border: "1px solid var(--color-border)", borderRadius: 14,
+                           fontSize: 14, cursor: "pointer", fontFamily: "var(--font-sans)" }}>
+            スキップ
           </button>
         </div>
       )}

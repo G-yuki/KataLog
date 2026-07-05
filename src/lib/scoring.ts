@@ -85,7 +85,10 @@ function calcEnvScore(
       if (pref === "both") return 25;
       return 0;
     }
-    return 0; // 晴れ × 屋内 はニュートラル
+    // 晴れ × 屋内：好み一致のみで加点（cloudy/null と同じ挙動）
+    if (pref === "indoor") return 20;
+    if (pref === "both") return 8;
+    return 0;
   }
 
   if (weather === "cloudy") {

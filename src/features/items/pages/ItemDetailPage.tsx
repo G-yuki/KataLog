@@ -218,15 +218,19 @@ export const ItemDetailPage = () => {
                         background: "linear-gradient(to bottom, rgba(0,0,0,0.35) 0%, transparent 50%, rgba(0,0,0,0.5) 100%)" }} />
           {/* 戻るボタン（写真上） */}
           <button onClick={() => navigate(backTo)}
-                  style={{ position: "absolute", top: 16, left: 16,
-                           background: "rgba(0,0,0,0.4)", border: "none", cursor: "pointer",
-                           borderRadius: "50%", width: 36, height: 36,
-                           display: "flex", alignItems: "center", justifyContent: "center",
-                           color: "#fff" }}>
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-              <path d="M11 4L6 9l5 5" stroke="currentColor" strokeWidth="1.8"
-                    strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
+                  style={{ position: "absolute", top: 2, left: 2,
+                           background: "transparent", border: "none", cursor: "pointer",
+                           width: 60, height: 60,
+                           display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ width: 44, height: 44, borderRadius: "50%",
+                          background: "rgba(0,0,0,0.4)",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          color: "#fff", pointerEvents: "none" }}>
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <path d="M11 4L6 9l5 5" stroke="currentColor" strokeWidth="1.8"
+                      strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
           </button>
           {/* Google評価（左下） */}
           {item.placeRating != null && (
@@ -267,7 +271,7 @@ export const ItemDetailPage = () => {
                       paddingBottom: 8, background: "var(--color-bg)" }}>
           <button onClick={() => navigate(backTo)}
                   style={{ background: "none", border: "none", cursor: "pointer",
-                           padding: "4px 8px 4px 0", color: "var(--color-text-mid)" }}>
+                           padding: "14px 24px 14px 12px", color: "var(--color-text-mid)" }}>
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
               <path d="M11 4L6 9l5 5" stroke="currentColor" strokeWidth="1.8"
                     strokeLinecap="round" strokeLinejoin="round"/>

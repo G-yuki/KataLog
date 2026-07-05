@@ -16,6 +16,7 @@ const NAV_ITEMS = [
   {
     path: "/suggest",
     label: "Suggest",
+    guideKey: "nav-suggest",
     icon: (
       <svg width="26" height="26" viewBox="0 0 22 22" fill="none">
         <path d="M10 2L11.4 8.6L18 10L11.4 11.4L10 18L8.6 11.4L2 10L8.6 8.6Z" fill="currentColor" />
@@ -27,6 +28,7 @@ const NAV_ITEMS = [
   {
     path: "/memory",
     label: "Memory",
+    guideKey: "nav-memory",
     icon: (
       <svg width="26" height="26" viewBox="0 0 22 22" fill="none">
         <path d="M4 15V8a7 7 0 0114 0v7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
@@ -75,11 +77,12 @@ export const BottomNav = () => {
         boxShadow: "0 4px 20px rgba(0,0,0,0.10)",
         padding: "6px 8px",
       }}>
-        {NAV_ITEMS.map(({ path, icon }) => {
+        {NAV_ITEMS.map(({ path, icon, guideKey }) => {
           const active = isActive(path);
           return (
             <button
               key={path}
+              data-guide={guideKey}
               onClick={() => navigate(path)}
               style={{
                 flex: 1,

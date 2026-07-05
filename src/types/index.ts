@@ -130,7 +130,8 @@ export type EventCategory =
 
 export interface RegionalEvent {
   title: string;
-  date: string;         // YYYY-MM-DD
+  date: string;         // YYYY-MM-DD（開始日）
+  endDate?: string;     // YYYY-MM-DD（終了日。単日の場合は省略）
   location: string;
   prefecture: string;
   category: EventCategory;
