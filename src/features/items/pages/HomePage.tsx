@@ -6,6 +6,8 @@ import { Loading } from "../../../components/Loading";
 import { getDisplayName } from "../../pair/services/pairService";
 import { usePair } from "../../../contexts/PairContext";
 import { db } from "../../../firebase/firestore";
+import { functions } from "../../../firebase/functions";
+import { httpsCallable } from "firebase/functions";
 import { doc, getDoc } from "firebase/firestore";
 import { CATEGORY_STYLE, CATEGORY_LABEL, CATEGORIES, PREFECTURES, OVERSEAS_REGIONS, OVERSEAS_COUNTRIES } from "../../../lib/constants";
 import { BottomNav } from "../../../components/BottomNav";
@@ -15,7 +17,7 @@ import { useWeather } from "../../../hooks/useWeather";
 import { scoreItem } from "../../../lib/scoring";
 import type { ScoreBreakdown } from "../../../lib/scoring";
 import { heroUrl } from "../../../lib/item";
-import type { Item, Category, ItemType, ItemStatus, Hearing } from "../../../types";
+import type { Item, Category, ItemType, ItemStatus, Hearing, RegionalEvent } from "../../../types";
 
 // sessionStorage から home_state を同期読み込み（pairId 不要の先頭一致サーチ）
 function readCachedHomeState(): {
@@ -74,6 +76,8 @@ export const HomePage = () => {
   );
   const [showGuide, setShowGuide] = useState(() => !localStorage.getItem("homeGuideSeen"));
   const [guideDetailOpen, setGuideDetailOpen] = useState(false);
+  const [regionalEvents, setRegionalEvents] = useState<RegionalEvent[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(false);
 
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -115,6 +119,36 @@ export const HomePage = () => {
     }
     navigate(`/home/${itemId}`);
   };
+
+  // 地域イベント取得（hearing に prefecture が設定されていて国内の場合のみ）
+  useEffect(() => {
+    if (!hearing || hearing.overseas || !hearing.prefecture) return;
+    const today = new Date();
+    const dateToDate = new Date();
+    dateToDate.setDate(today.getDate() + 7);
+    const fmt = (d: Date) => d.toISOString().split("T")[0];
+    const dateFrom = fmt(today);
+    const dateTo = fmt(dateToDate);
+
+    const sessionKey = `events_${hearing.prefecture}_${dateFrom}`;
+    const cached = sessionStorage.getItem(sessionKey);
+    if (cached) {
+      try { setRegionalEvents(JSON.parse(cached)); return; } catch { /* ignore */ }
+    }
+
+    setEventsLoading(true);
+    const call = httpsCallable<
+      { prefecture: string; dateFrom: string; dateTo: string },
+      { events: RegionalEvent[] }
+    >(functions, "fetchRegionalEvents");
+    call({ prefecture: hearing.prefecture, dateFrom, dateTo })
+      .then((res) => {
+        setRegionalEvents(res.data.events ?? []);
+        try { sessionStorage.setItem(sessionKey, JSON.stringify(res.data.events ?? [])); } catch { /* ignore */ }
+      })
+      .catch((e) => console.warn("fetchRegionalEvents:", e))
+      .finally(() => setEventsLoading(false));
+  }, [hearing?.prefecture, hearing?.overseas]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 手動追加モーダル
   const [showAddModal, setShowAddModal] = useState(false);
@@ -453,6 +487,69 @@ export const HomePage = () => {
             </div>
           )}
         </div>
+
+        {/* 今週の地域イベントセクション */}
+        {(eventsLoading || regionalEvents.length > 0) && (
+          <div style={{ borderTop: "1px solid rgba(0,0,0,0.05)" }}>
+            <div style={{ display: "flex", alignItems: "center", padding: "16px 20px 4px" }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: "var(--color-text-mid)",
+                             fontFamily: "var(--font-sans)", letterSpacing: "0.06em" }}>
+                今週の地域イベント
+              </span>
+              <span style={{ fontSize: 11, color: "var(--color-text-soft)", marginLeft: 8,
+                             fontFamily: "var(--font-sans)" }}>
+                {hearing?.prefecture}
+              </span>
+            </div>
+            {eventsLoading ? (
+              <div style={{ padding: "12px 20px", fontSize: 12, color: "var(--color-text-soft)",
+                            fontFamily: "var(--font-sans)" }}>
+                取得中...
+              </div>
+            ) : (
+              <div style={{ padding: "0 20px 12px", display: "flex", gap: 10,
+                            overflowX: "auto", scrollbarWidth: "none" }}>
+                {regionalEvents.map((ev, i) => {
+                  const catStyle = CATEGORY_STYLE[ev.category as keyof typeof CATEGORY_STYLE]
+                                ?? CATEGORY_STYLE["other"];
+                  const catLabel = CATEGORY_LABEL[ev.category as keyof typeof CATEGORY_LABEL]
+                                ?? ev.category;
+                  return (
+                    <div key={i}
+                         onClick={() => ev.url && window.open(ev.url, "_blank", "noopener")}
+                         style={{
+                           flexShrink: 0,
+                           width: 160,
+                           borderRadius: 12,
+                           background: catStyle.bg,
+                           padding: "12px 12px 10px",
+                           cursor: ev.url ? "pointer" : "default",
+                           display: "flex",
+                           flexDirection: "column",
+                           gap: 4,
+                         }}>
+                      <div style={{ fontSize: 18, lineHeight: 1 }}>{catStyle.emoji}</div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#fff",
+                                   fontFamily: "var(--font-sans)", lineHeight: 1.3,
+                                   display: "-webkit-box", WebkitLineClamp: 2,
+                                   WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                        {ev.title}
+                      </div>
+                      <div style={{ fontSize: 10, color: "rgba(255,255,255,0.75)",
+                                   fontFamily: "var(--font-sans)", marginTop: 2 }}>
+                        {ev.date} · {ev.location}
+                      </div>
+                      <div style={{ fontSize: 10, color: "rgba(255,255,255,0.55)",
+                                   fontFamily: "var(--font-sans)" }}>
+                        {catLabel}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* 試してみる？セクション */}
         {filteredTry.length > 0 && (

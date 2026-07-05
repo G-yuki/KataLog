@@ -114,6 +114,36 @@ export interface SavedMemory {
   createdAt: Timestamp;
 }
 
+// ── 地域イベント（BN） ─────────────────────────────
+export type EventCategory =
+  | "nature"
+  | "gourmet"
+  | "art"
+  | "music"
+  | "sports"
+  | "movie"
+  | "book"
+  | "cafe"
+  | "theme"
+  | "onsen"
+  | "other";
+
+export interface RegionalEvent {
+  title: string;
+  date: string;         // YYYY-MM-DD
+  location: string;
+  prefecture: string;
+  category: EventCategory;
+  description?: string;
+  url?: string;
+}
+
+export interface EventCache {
+  events: RegionalEvent[];
+  fetchedAt: Timestamp;
+  expiresAt: Timestamp;
+}
+
 // ふたりのスワイプ結果保存用（マッチング前）
 export interface PendingItem {
   pendingItemId: string;

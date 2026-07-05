@@ -84,5 +84,10 @@ service cloud.firestore {
       // 認証済みユーザーのみ作成可（読み取り・変更・削除は管理者のみ）
       allow create: if request.auth != null;
     }
+
+    // ── 地域イベントキャッシュ ──
+    match /eventCache/{docId} {
+      allow read: if request.auth != null;
+    }
   }
 }

@@ -489,6 +489,86 @@ export const onPairSwipesComplete = onDocumentUpdated(
   }
 );
 
+// ── 地域イベント取得（Gemini + Google Search Grounding + Firestoreキャッシュ） ───
+export const fetchRegionalEvents = onCall(
+  { invoker: "public", secrets: [geminiApiKey], enforceAppCheck: false },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "ログインが必要です。");
+    }
+
+    const prefecture: string = request.data?.prefecture;
+    const dateFrom: string   = request.data?.dateFrom;  // YYYY-MM-DD
+    const dateTo: string     = request.data?.dateTo;    // YYYY-MM-DD
+
+    if (!prefecture || !dateFrom || !dateTo) {
+      throw new HttpsError("invalid-argument", "prefecture, dateFrom, dateTo が必要です。");
+    }
+
+    const cacheKey = `${prefecture}_${dateFrom}`;
+    const cacheRef = admin.firestore().collection("eventCache").doc(cacheKey);
+
+    // キャッシュ確認
+    const cached = await cacheRef.get();
+    if (cached.exists) {
+      const cacheData = cached.data()!;
+      const expiresAt = cacheData.expiresAt as admin.firestore.Timestamp;
+      if (expiresAt.toMillis() > Date.now()) {
+        return { events: cacheData.events };
+      }
+    }
+
+    // Gemini + Google Search Grounding
+    const genAI = new GoogleGenerativeAI(geminiApiKey.value());
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.5-flash-lite",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      tools: [{ googleSearch: {} }] as any,
+    });
+
+    const prompt =
+      `${prefecture}で${dateFrom}から${dateTo}にかけて開催される実際のイベントを最大10件、` +
+      `以下のJSON配列のみで回答してください。` +
+      `マークダウン・コードブロック・説明文は一切不要です。JSONのみ出力してください。\n\n` +
+      `[{"title":"イベント名","date":"YYYY-MM-DD","location":"会場名","category":"art|music|nature|gourmet|sports|movie|book|cafe|theme|onsen|other","description":"一言説明","url":"イベントページURL"}]\n\n` +
+      `ルール：実在するイベントのみ記載し確認できないものは含めない。オンラインイベントは除外する。URLが不明な場合はurlフィールドを省略する。`;
+
+    const result = await model.generateContent(prompt);
+    const text   = result.response.text();
+
+    // JSON配列を抽出（コードブロックに包まれていても対応）
+    interface EventEntry {
+      title?: string;
+      date?: string;
+      location?: string;
+      category?: string;
+      description?: string;
+      url?: string;
+    }
+    let events: EventEntry[] = [];
+    try {
+      const jsonMatch = text.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        const parsed: unknown = JSON.parse(jsonMatch[0]);
+        if (Array.isArray(parsed)) {
+          events = (parsed as EventEntry[])
+            .filter((e) => e.title && e.date && e.location && e.category)
+            .slice(0, 10);
+        }
+      }
+    } catch (e) {
+      console.warn("fetchRegionalEvents: JSON parse failed", e, text);
+    }
+
+    // Firestoreにキャッシュ保存（24h TTL）
+    const now = admin.firestore.Timestamp.now();
+    const expiresAt = new admin.firestore.Timestamp(now.seconds + 24 * 60 * 60, 0);
+    await cacheRef.set({ events, fetchedAt: now, expiresAt });
+
+    return { events };
+  }
+);
+
 // ── アイテム削除トリガー（TTL 削除時に Storage 写真を削除） ────────────
 export const onItemDeleted = onDocumentDeleted(
   {
