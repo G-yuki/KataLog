@@ -101,7 +101,6 @@ export const PREFECTURES = [
 export const RANGE_OPTIONS = [
   { id: "county",   label: "県内中心" },
   { id: "neighbor", label: "隣県まで" },
-  { id: "anywhere", label: "全国OK" },
 ] as const;
 
 export const CHILDREN_OPTIONS = [

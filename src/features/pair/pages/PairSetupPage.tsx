@@ -19,7 +19,7 @@ import { db } from "../../../firebase/firestore";
 import { doc, getDocFromServer, setDoc, onSnapshot } from "firebase/firestore";
 import { QuickGuide } from "../../setup/components/QuickGuide";
 
-type Step = "loading" | "nickname" | "guide" | "pair";
+type Step = "loading" | "nickname" | "choice" | "guide" | "pair";
 
 export const PairSetupPage = () => {
   const { user } = useAuth();
@@ -110,7 +110,7 @@ export const PairSetupPage = () => {
       }
 
       // 招待URLあり + displayName未設定 → ニックネーム設定後に参加（handleNicknameSave内で処理）
-      setStep(name ? "pair" : "nickname");
+      setStep(name ? "choice" : "nickname");
     })().catch(() => {
       setStep("nickname");
     });
@@ -176,7 +176,7 @@ export const PairSetupPage = () => {
     }
 
     setNicknameSaving(false);
-    setStep("guide");
+    setStep("choice");
   };
 
   // ソロで始める
@@ -244,6 +244,49 @@ export const PairSetupPage = () => {
   };
 
   if (step === "loading") return <Loading />;
+
+  if (step === "choice") return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center",
+                  justifyContent: "center", minHeight: "100dvh", padding: "0 40px",
+                  background: "var(--color-bg)", fontFamily: "var(--font-sans)" }}>
+      <img src="/logo.png" alt="KataLog"
+           style={{ height: 28, marginBottom: 40, opacity: 0.75 }} />
+      <h2 style={{ fontFamily: "var(--font-serif)", fontSize: 22, fontWeight: 600,
+                   color: "var(--color-text-main)", marginBottom: 8, textAlign: "center" }}>
+        どのように使いますか？
+      </h2>
+      <p style={{ fontSize: 13, color: "var(--color-text-mid)", textAlign: "center",
+                  lineHeight: 1.8, marginBottom: 36 }}>
+        あとからパートナーを招待することもできます。
+      </p>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12, width: "100%", maxWidth: 280 }}>
+        <button
+          onClick={() => setStep("guide")}
+          style={{ width: "100%", padding: "16px",
+                   background: "var(--color-primary)", color: "#fff",
+                   border: "none", borderRadius: 14, fontSize: 15, fontWeight: 600,
+                   cursor: "pointer", fontFamily: "var(--font-sans)" }}>
+          パートナーと使う
+        </button>
+        <button
+          onClick={handleSoloStart}
+          disabled={pairLoading}
+          style={{ width: "100%", padding: "15px",
+                   background: "transparent", color: "var(--color-text-mid)",
+                   border: "1px solid var(--color-border)", borderRadius: 14,
+                   fontSize: 15, fontWeight: 500,
+                   cursor: pairLoading ? "default" : "pointer",
+                   fontFamily: "var(--font-sans)", opacity: pairLoading ? 0.5 : 1 }}>
+          {pairLoading ? "作成中..." : "1人で使う"}
+        </button>
+      </div>
+      {pairError && (
+        <p style={{ fontSize: 12, color: "#e03030", marginTop: 12, textAlign: "center" }}>
+          {pairError}
+        </p>
+      )}
+    </div>
+  );
 
   if (step === "guide") return <QuickGuide onComplete={() => setStep("pair")} />;
 
@@ -354,29 +397,6 @@ export const PairSetupPage = () => {
           >
             {pairLoading ? "作成中..." : "ペアを作成する"}
           </button>
-
-          <div style={{ display: "flex", alignItems: "center", gap: 10,
-                        width: "100%", maxWidth: 280, margin: "4px 0" }}>
-            <div style={{ flex: 1, height: 1, background: "var(--color-border)" }} />
-            <span style={{ fontSize: 12, color: "var(--color-text-soft)" }}>または</span>
-            <div style={{ flex: 1, height: 1, background: "var(--color-border)" }} />
-          </div>
-
-          <button
-            style={{ width: "100%", maxWidth: 280, padding: "14px",
-                     background: "transparent", border: "1px solid var(--color-border)",
-                     borderRadius: 14, fontSize: 14, color: "var(--color-text-mid)",
-                     cursor: pairLoading ? "default" : "pointer",
-                     fontFamily: "var(--font-sans)", opacity: pairLoading ? 0.5 : 1 }}
-            onClick={handleSoloStart}
-            disabled={pairLoading}
-          >
-            1人で始める
-          </button>
-          <p style={{ fontSize: 11, color: "var(--color-text-soft)", textAlign: "center",
-                      lineHeight: 1.6, maxWidth: 260 }}>
-            あとからパートナーを招待することもできます
-          </p>
         </>
       ) : (
         <>

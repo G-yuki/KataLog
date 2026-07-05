@@ -62,7 +62,7 @@ const fmtPeriod = (period: { from: Timestamp; to: Timestamp }): string => {
 
 export const MemoryPage = () => {
   const navigate = useNavigate();
-  const { pairId, isSolo, loading: pairLoading } = usePair();
+  const { pairId, loading: pairLoading } = usePair();
   const { items, loading } = useItems(pairId);
 
   const allDoneItems = items
@@ -381,7 +381,7 @@ export const MemoryPage = () => {
               </p>
               <p style={{ fontSize: 13, color: "var(--color-text-mid)", lineHeight: 1.7 }}>
                 リストのアイテムを体験したら<br />「完了」にチェックしましょう。<br />
-                {isSolo ? "AIがあなたの思い出を文章にしてくれます。" : "AIがふたりの思い出を文章にしてくれます。"}
+                AIが思い出を文章にしてくれます。
               </p>
               <div style={{ marginTop: 24, display: "flex", flexDirection: "column", gap: 10, alignItems: "center" }}>
                 <button onClick={() => navigate("/home")}
@@ -517,8 +517,8 @@ export const MemoryPage = () => {
                         <div style={{ display: "flex", gap: 6 }}>
                           {([
                             ["text",   "📝 テキスト",   true],
-                            ["visual", "🎨 ビジュアル", false],
-                            ["movie",  "🎬 ムービー",   false],
+                            ["visual", "🎨 画像", false],
+                            ["movie",  "🎬 動画",   false],
                           ] as const).map(([val, lbl, active]) => (
                             <button key={val}
                                     style={{ fontSize: 12, padding: "5px 12px", borderRadius: 20,
@@ -562,7 +562,7 @@ export const MemoryPage = () => {
                           <div style={{ height: 1, flex: 1, background: "var(--color-border)" }} />
                           <p style={{ fontSize: 10, color: "var(--color-accent)", letterSpacing: "0.12em",
                                       fontFamily: "var(--font-sans)", fontWeight: 500 }}>
-                            {isSolo ? "あなたの思い出" : "ふたりの思い出"}
+                            あなたの思い出
                           </p>
                           <div style={{ height: 1, flex: 1, background: "var(--color-border)" }} />
                         </div>
@@ -768,14 +768,14 @@ export const MemoryPage = () => {
             <div style={{ textAlign: "center" }}>
               <p style={{ fontSize: 32, marginBottom: 8 }}>📖</p>
               <h2 style={{ fontSize: 17, fontWeight: 600, color: "var(--color-text-main)" }}>
-                思い出 — {isSolo ? "あなた" : "ふたり"}のかたログ — とは？
+                かたログとは？
               </h2>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {[
                 { icon: "🧠", text: "AIが過去の体験を文章でまとめます" },
-                { icon: "🎞️", text: isSolo ? "評価やメモをもとにあなたの思い出を振り返れます" : "評価やメモをもとにふたりの思い出を振り返れます" },
-                { icon: "📌", text: "気に入った思い出はかたちに変換して、いつでも見返せます！" },
+                { icon: "📌", text: "記録された思い出は、いつでも振り返れます" },
+                { icon: "💾", text: "素敵な思い出は、かたちとして残しましょう！" },
               ].map(({ icon, text }) => (
                 <div key={icon} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
                   <span style={{ fontSize: 18, flexShrink: 0, marginTop: 1 }}>{icon}</span>

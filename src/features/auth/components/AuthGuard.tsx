@@ -70,11 +70,11 @@ export const AuthGuard = ({ children }: Props) => {
            style={{ fontSize: 12, color: "var(--color-text-soft)" }}>
           思い出を、かたちに。
         </p>
-        <p className="auth-sub">
-          {hasInvite
-            ? "ログインしてパートナーと一緒に始めましょう"
-            : "AIでふたりにぴったりの体験を提案します"}
-        </p>
+        {hasInvite && (
+          <p className="auth-sub">
+            ログインしてパートナーと一緒に始めましょう
+          </p>
+        )}
 
         {error && <p className="auth-error">{error}</p>}
 

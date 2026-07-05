@@ -1,5 +1,5 @@
 // src/features/setup/components/HomeGuide.tsx
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { usePair } from "../../../contexts/PairContext";
 
 type Phase = "home" | "detail";
@@ -12,10 +12,10 @@ interface StepDef {
 
 const ALL_STEPS: StepDef[] = [
   { target: "filter-area",  desc: "カテゴリで\nアイテムを絞り込み",              phase: "home" },
-  { target: "sort-select",  desc: "並び替え\nおすすめ順に表示",  phase: "home" },
+  { target: "sort-select",  desc: "並び替え\n新しい順、おすすめ順\n切り替え可", phase: "home" },
   { target: "search-area",  desc: "キーワードで\nアイテムを検索",                 phase: "home" },
   { target: "add-btn",      desc: "新しく\nアイテムを追加 ＋",                   phase: "home" },
-  { target: "nav-suggest",  desc: "おすすめ体験\nふたりに合う体験を提案",     phase: "home" },
+  { target: "nav-suggest",  desc: "おすすめ体験\nあなたに合う体験を提案",      phase: "home" },
   { target: "nav-memory",   desc: "かたログ\n体験した思い出をかたちに残す",         phase: "home" },
   { target: "heart-btn",    desc: "❤️ をタップして\nお気に入りへ移動",            phase: "detail" },
   { target: "done-btn",     desc: "体験したら\n完了チェック ✅",                  phase: "detail" },
@@ -30,11 +30,7 @@ export interface HomeGuideProps {
 
 export const HomeGuide = ({ onClose, onOpenDetail, onCloseDetail, detailReady }: HomeGuideProps) => {
   const { isSolo } = usePair();
-  const steps = useMemo(() => ALL_STEPS.map((s) =>
-    s.target === "nav-suggest" && isSolo
-      ? { ...s, desc: "おすすめ体験\nあなたに合う体験を提案" }
-      : s
-  ), [isSolo]);
+  const steps = ALL_STEPS;
 
   const [index, setIndex] = useState(0);
   const [rect, setRect] = useState<DOMRect | null>(null);
@@ -94,7 +90,7 @@ export const HomeGuide = ({ onClose, onOpenDetail, onCloseDetail, detailReady }:
           </h2>
           <p style={{ fontSize: 13, color: "var(--color-text-mid)", marginBottom: 24,
                       lineHeight: 1.8, fontFamily: "var(--font-sans)" }}>
-            {isSolo ? "あなただけのリストを楽しんでください。" : <>ふたりのリストを<br />楽しんでください。</>}
+            {isSolo ? "あなただけのリストを楽しんでください！" : <>ふたりのリストを<br />楽しんでください。</>}
           </p>
           <button onClick={onClose}
                   style={{ width: "100%", padding: "14px", background: "var(--color-primary)",

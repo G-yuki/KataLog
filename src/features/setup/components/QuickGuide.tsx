@@ -97,12 +97,12 @@ const StepHearing = ({ onNext }: { onNext: () => void }) => (
     <div style={{ marginBottom: 20 }}>
       <h2 style={{
         fontFamily: "var(--font-serif)", fontSize: 20, fontWeight: 600,
-        color: "var(--color-text-main)", marginBottom: 8,
+        color: "var(--color-text-main)", marginBottom: 16,
       }}>
         はじめに、好みをヒアリング
       </h2>
       <p style={{ fontSize: 13, color: "var(--color-text-mid)", lineHeight: 1.7 }}>
-        いくつかの質問に答えるだけで、ふたりにぴったりな体験をAIがピックアップします。
+        いくつかの質問に答えるだけで、<br />ふたりにぴったりな体験をAIがピックアップします。
       </p>
     </div>
 
@@ -162,7 +162,7 @@ const StepSwipe = ({ onNext }: { onNext: () => void }) => {
       <div style={{ marginBottom: 20 }}>
         <h2 style={{
           fontFamily: "var(--font-serif)", fontSize: 20, fontWeight: 600,
-          color: "var(--color-text-main)", marginBottom: 8,
+          color: "var(--color-text-main)", marginBottom: 16,
         }}>
           ボタンで直感的に選ぶ
         </h2>
@@ -245,7 +245,7 @@ const StepList = ({ onNext }: { onNext: () => void }) => (
     <div style={{ marginBottom: 20 }}>
       <h2 style={{
         fontFamily: "var(--font-serif)", fontSize: 20, fontWeight: 600,
-        color: "var(--color-text-main)", marginBottom: 8,
+        color: "var(--color-text-main)", marginBottom: 16,
       }}>
         ふたりのリストが完成！
       </h2>
@@ -304,7 +304,7 @@ const StepMemory = ({ onNext }: { onNext: () => void }) => {
       <div style={{ marginBottom: 20 }}>
         <h2 style={{
           fontFamily: "var(--font-serif)", fontSize: 20, fontWeight: 600,
-          color: "var(--color-text-main)", marginBottom: 8,
+          color: "var(--color-text-main)", marginBottom: 16,
         }}>
           体験したら思い出に残そう
         </h2>
