@@ -80,12 +80,19 @@ export const HomePage = () => {
   const [showGuide, setShowGuide] = useState(() => !localStorage.getItem("homeGuideSeen"));
   const [guideDetailOpen, setGuideDetailOpen] = useState(false);
   const [regionalEvents, setRegionalEvents] = useState<RegionalEvent[]>(() => {
+    // docs/progress/bn-events-debug.md 参照
+    // hearing チェックより先にモジュールキャッシュを確認する（hearing=null でもイベントを復元）
+    const today = new Date().toISOString().split("T")[0];
+
+    // 1. モジュールキャッシュ最優先（hearing 不要・今日のデータなら即返す）
+    if (_eventsModuleCache?.key.endsWith(`_${today}`) && _eventsModuleCache.data.length > 0) {
+      return _eventsModuleCache.data;
+    }
+
+    // 2. sessionStorage フォールバック（hearing が確認できる場合のみ）
     const h = readCachedHomeState().hearing;
     if (!h?.prefecture || h.overseas) return [];
-    const key = `${h.prefecture}_${new Date().toISOString().split("T")[0]}`;
-    // 1. モジュールキャッシュ（リマウントをまたいで即時復元）
-    if (_eventsModuleCache?.key === key) return _eventsModuleCache.data;
-    // 2. sessionStorage フォールバック
+    const key = `${h.prefecture}_${today}`;
     try {
       const c = sessionStorage.getItem(`events_${key}`);
       if (c) {
