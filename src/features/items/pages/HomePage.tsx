@@ -192,7 +192,9 @@ export const HomePage = () => {
     const dateFrom = new Date().toISOString().split("T")[0];
     const dateToDate = new Date(); dateToDate.setDate(dateToDate.getDate() + 7);
     const dateTo = dateToDate.toISOString().split("T")[0];
-    const fetchKey = `${hearing.prefecture}_${dateFrom}`;
+    const genres = hearing.genres ?? [];
+    const genresKey = genres.length > 0 ? `_${[...genres].sort().join(",")}` : "";
+    const fetchKey = `${hearing.prefecture}_${dateFrom}${genresKey}`;
 
     // モジュールキャッシュに既にある → 表示を確保して終了
     if (_eventsModuleCache?.key === fetchKey) {
@@ -222,10 +224,10 @@ export const HomePage = () => {
     eventsFetchedKeyRef.current = fetchKey;
     setEventsLoading(true);
     const call = httpsCallable<
-      { prefecture: string; dateFrom: string; dateTo: string },
+      { prefecture: string; dateFrom: string; dateTo: string; genres: string[] },
       { events: RegionalEvent[] }
     >(functions, "fetchRegionalEvents");
-    call({ prefecture: hearing.prefecture, dateFrom, dateTo })
+    call({ prefecture: hearing.prefecture, dateFrom, dateTo, genres })
       .then((res) => {
         const events = res.data.events ?? [];
         if (events.length > 0) {
@@ -236,7 +238,7 @@ export const HomePage = () => {
       })
       .catch((e) => console.warn("[events] CF error:", e))
       .finally(() => setEventsLoading(false));
-  }, [hearing?.prefecture, !!hearing?.overseas]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hearing?.prefecture, !!hearing?.overseas, hearing?.genres?.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 手動追加モーダル
   const [showAddModal, setShowAddModal] = useState(false);
@@ -432,13 +434,13 @@ export const HomePage = () => {
       </header>
 
       {/* ── フィルター + 並び替え ── */}
-      <div data-guide="filter-area"
-           style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 8,
+      <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 8,
                     padding: "6px 12px", background: "var(--color-bg)",
                     borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
         {/* カテゴリ ドロップダウン */}
         <div style={{ position: "relative" }}>
           <button
+            data-guide="filter-area"
             onClick={() => setCatOpen((o) => !o)}
             style={{ display: "flex", alignItems: "center", gap: 4,
                      fontSize: 12, padding: "5px 10px", borderRadius: 20,

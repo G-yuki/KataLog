@@ -31,11 +31,11 @@ export const SwipeTutorial = ({ onClose, isPartner = false }: Props) => (
 
       <div style={{ display: "flex", flexDirection: "column", gap: 12, margin: "0 0 20px" }}>
         <Row icon="⇧" label="興味アリ" color="#f43f5e"
-             desc="ぜひやってみたい！（リストに必ず追加）　上スワイプ or ボタン" />
+             desc="ぜひやってみたい！（リストに必ず追加）" sub="上スワイプ or ボタン" />
         <Row icon="⇨" label="あとで" color="var(--color-primary)"
-             desc="気になるけど、今すぐじゃなくてもOK　右スワイプ or ボタン" />
+             desc="気になるけど、今すぐじゃなくてもOK" sub="右スワイプ or ボタン" />
         <Row icon="⇦" label="興味なし" color="var(--color-text-soft)"
-             desc="今回はスキップ　左スワイプ or ボタン" />
+             desc="今回はスキップ" sub="左スワイプ or ボタン" />
       </div>
 
       <button onClick={onClose}
@@ -49,8 +49,8 @@ export const SwipeTutorial = ({ onClose, isPartner = false }: Props) => (
   </div>
 );
 
-const Row = ({ icon, label, color, desc }: {
-  icon: string; label: string; color: string; desc: string;
+const Row = ({ icon, label, color, desc, sub }: {
+  icon: string; label: string; color: string; desc: string; sub: string;
 }) => (
   <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
     <div style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 10,
@@ -62,6 +62,7 @@ const Row = ({ icon, label, color, desc }: {
     <div>
       <p style={{ fontSize: 13, fontWeight: 700, color, marginBottom: 2 }}>{label}</p>
       <p style={{ fontSize: 11, color: "var(--color-text-mid)", lineHeight: 1.5 }}>{desc}</p>
+      <p style={{ fontSize: 11, color: "var(--color-text-soft)", lineHeight: 1.5 }}>{sub}</p>
     </div>
   </div>
 );

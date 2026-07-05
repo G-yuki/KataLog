@@ -497,15 +497,17 @@ export const fetchRegionalEvents = onCall(
       throw new HttpsError("unauthenticated", "ログインが必要です。");
     }
 
-    const prefecture: string = request.data?.prefecture;
-    const dateFrom: string   = request.data?.dateFrom;  // YYYY-MM-DD
-    const dateTo: string     = request.data?.dateTo;    // YYYY-MM-DD
+    const prefecture: string   = request.data?.prefecture;
+    const dateFrom: string     = request.data?.dateFrom;  // YYYY-MM-DD
+    const dateTo: string       = request.data?.dateTo;    // YYYY-MM-DD
+    const genres: string[]     = Array.isArray(request.data?.genres) ? request.data.genres : [];
 
     if (!prefecture || !dateFrom || !dateTo) {
       throw new HttpsError("invalid-argument", "prefecture, dateFrom, dateTo が必要です。");
     }
 
-    const cacheKey = `${prefecture}_${dateFrom}`;
+    const genresKey = genres.length > 0 ? `_${[...genres].sort().join(",")}` : "";
+    const cacheKey = `${prefecture}_${dateFrom}${genresKey}`;
     const cacheRef = admin.firestore().collection("eventCache").doc(cacheKey);
 
     // キャッシュ確認（空配列は無効キャッシュとして再取得する）
@@ -527,12 +529,15 @@ export const fetchRegionalEvents = onCall(
       tools: [{ googleSearch: {} }] as any,
     });
 
+    const genreHint = genres.length > 0
+      ? `ユーザーの好みカテゴリ（${genres.join("・")}）に関連するイベントを優先しつつ、`
+      : "";
     const prompt =
       `${prefecture}で${dateFrom}から${dateTo}の期間中に開催される実際のイベントを最大20件、` +
       `以下のJSON配列のみで回答してください。` +
       `マークダウン・コードブロック・説明文は一切不要です。JSONのみ出力してください。\n\n` +
       `[{"title":"イベント名","date":"YYYY-MM-DD","endDate":"YYYY-MM-DD","location":"会場名","category":"art|music|nature|gourmet|sports|movie|book|cafe|theme|onsen|other","description":"一言説明","url":"イベントページURL"}]\n\n` +
-      `ルール：${dateFrom}〜${dateTo}の各日程に偏りなくイベントを含めること。実在するイベントのみ記載し確認できないものは含めない。オンラインイベントは除外する。URLが不明な場合はurlフィールドを省略する。複数日にわたるイベントはdateに開始日、endDateに終了日を記載すること。単日のイベントはendDateを省略してよい。`;
+      `ルール：${genreHint}${dateFrom}〜${dateTo}の各日程に偏りなくイベントを含めること。実在するイベントのみ記載し確認できないものは含めない。オンラインイベントは除外する。URLが不明な場合はurlフィールドを省略する。複数日にわたるイベントはdateに開始日、endDateに終了日を記載すること。単日のイベントはendDateを省略してよい。`;
 
     const result = await model.generateContent(prompt);
     const text   = result.response.text();

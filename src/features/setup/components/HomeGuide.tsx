@@ -90,7 +90,7 @@ export const HomeGuide = ({ onClose, onOpenDetail, onCloseDetail, detailReady }:
           </h2>
           <p style={{ fontSize: 13, color: "var(--color-text-mid)", marginBottom: 24,
                       lineHeight: 1.8, fontFamily: "var(--font-sans)" }}>
-            {isSolo ? "あなただけのリストを楽しんでください！" : <>ふたりのリストを<br />楽しんでください。</>}
+            {isSolo ? <>あなただけのリストを<br />楽しんでください！</> : <>ふたりのリストを<br />楽しんでください。</>}
           </p>
           <button onClick={onClose}
                   style={{ width: "100%", padding: "14px", background: "var(--color-primary)",
@@ -112,7 +112,7 @@ export const HomeGuide = ({ onClose, onOpenDetail, onCloseDetail, detailReady }:
   const spotW    = rect.width  + PAD * 2;
   const spotH    = rect.height + PAD * 2;
   const spotMidY = spotTop + spotH / 2;
-  const showBelow = spotMidY < window.innerHeight * 0.55;
+  const showBelow = spotMidY < window.innerHeight * 0.45;
   const descTop    = showBelow ? spotTop + spotH + 28 : undefined;
   const descBottom = !showBelow ? window.innerHeight - spotTop + 28 : undefined;
 
@@ -152,7 +152,7 @@ export const HomeGuide = ({ onClose, onOpenDetail, onCloseDetail, detailReady }:
 
       {/* ステップインジケーター + ヒント */}
       <div style={{
-        position: "fixed", bottom: 100, left: "50%", transform: "translateX(-50%)",
+        position: "fixed", bottom: 150, left: "50%", transform: "translateX(-50%)",
         display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
         pointerEvents: "none",
       }}>

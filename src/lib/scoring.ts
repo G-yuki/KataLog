@@ -73,7 +73,7 @@ function calcEnvScore(
   const pref = hearing.indoor; // "outdoor" | "indoor" | "both"
 
   if (weather === "rain" || weather === "snow") {
-    if (isOutdoor) return -50;
+    if (isOutdoor) return -20;
     if (pref === "indoor") return 40;
     if (pref === "both") return 25;
     return 0;

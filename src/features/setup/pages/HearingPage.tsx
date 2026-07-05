@@ -1,5 +1,5 @@
 // src/features/setup/pages/HearingPage.tsx
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/hooks/useAuth";
 import { usePair } from "../../../contexts/PairContext";
@@ -19,8 +19,15 @@ const TOTAL_STEPS = 6;
 
 export const HearingPage = () => {
   const { user } = useAuth();
-  const { isSolo } = usePair();
+  const { pairId, isSolo, loading: pairLoading } = usePair();
   const navigate = useNavigate();
+
+  // pairId がない状態で直接アクセスされた場合（URL直打ち・履歴遷移等）はセットアップ入口へ戻す
+  useEffect(() => {
+    if (!pairLoading && !pairId) {
+      navigate("/", { replace: true });
+    }
+  }, [pairId, pairLoading, navigate]);
   const { generate } = useGenerateItems();
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
@@ -130,7 +137,16 @@ export const HearingPage = () => {
   if (generating) return (
     <div className="flex flex-col items-center justify-center min-h-screen gap-4"
          style={{ background: "var(--color-bg)", fontFamily: "var(--font-sans)" }}>
-      <p className="text-5xl animate-spin" style={{ animationDuration: "1.4s" }}>✦</p>
+      <div style={{ animation: "pulse 1.4s ease-in-out infinite", display: "inline-flex" }}>
+        <svg width={52} height={52} viewBox="0 0 22 22" fill="none">
+          <path d="M10 2L11.4 8.6L18 10L11.4 11.4L10 18L8.6 11.4L2 10L8.6 8.6Z"
+                style={{ fill: "var(--color-accent)", stroke: "var(--color-accent)", strokeWidth: 0.6 }}/>
+          <path d="M17.5 1L18.3 3.7L21 4.5L18.3 5.3L17.5 8L16.7 5.3L14 4.5L16.7 3.7Z"
+                style={{ fill: "var(--color-accent)", stroke: "var(--color-accent)", strokeWidth: 0.5 }}/>
+          <path d="M4.5 15L5 16.5L6.5 17L5 17.5L4.5 19L4 17.5L2.5 17L4 16.5Z"
+                style={{ fill: "var(--color-accent)", stroke: "var(--color-accent)", strokeWidth: 0.4 }}/>
+        </svg>
+      </div>
       <p className="text-sm font-medium" style={{ color: "var(--color-text-mid)" }}>
         AIがあなたにぴったりな体験を探しています...
       </p>

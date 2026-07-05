@@ -37,6 +37,10 @@ export const PairSetupPage = () => {
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
   const [pairError, setPairError] = useState<string | null>(null);
   const [pairLoading, setPairLoading] = useState(false);
+  // ソロペアが既に存在する状態で choice 画面に戻った場合（再作成不要フラグ）
+  const [hasSoloPair, setHasSoloPair] = useState(false);
+  // guide 完了後の遷移先: "pair"=招待画面, "hearing"=hearing直行
+  const [afterGuide, setAfterGuide] = useState<"pair" | "hearing">("pair");
   const [copied, setCopied] = useState(false);
   const [waitingForPartner, setWaitingForPartner] = useState(false);
 
@@ -70,8 +74,10 @@ export const PairSetupPage = () => {
             // パートナー未参加の場合
             if (members.length === 1) {
               if (data.soloMode) {
-                // ソロユーザー → セットアップ進行状況に応じて遷移
-                navigate(data.matchingFinalized ? "/home" : data.hearing ? "/setup/swipe" : "/setup", { replace: true });
+                if (data.hearing) { navigate("/setup/swipe", { replace: true }); return; }
+                // hearing 未完了 → choice 画面を表示（既存ペア再利用フラグを立てる）
+                setHasSoloPair(true);
+                setStep("choice");
               } else {
                 // ペア作成済みでパートナー待機中 → 招待リンク画面
                 setPairId(existingPairId);
@@ -84,7 +90,13 @@ export const PairSetupPage = () => {
             // パートナー参加済み・セットアップ未完了 → ロール別に遷移
             const isCreator = members[0] === user.uid;
             if (isCreator) {
-              navigate(data.hearing ? "/setup/swipe" : "/setup", { replace: true });
+              if (data.hearing) {
+                navigate("/setup/swipe", { replace: true });
+              } else {
+                // hearing 未完了 → choice 画面を表示（guide 後は hearing へ直行）
+                setAfterGuide("hearing");
+                setStep("choice");
+              }
             } else {
               navigate("/setup/partner-waiting", { replace: true });
             }
@@ -185,7 +197,10 @@ export const PairSetupPage = () => {
     setPairLoading(true);
     setPairError(null);
     try {
-      await createSoloPair(user.uid);
+      // 既存のソロペアがある場合は再作成しない
+      if (!hasSoloPair) {
+        await createSoloPair(user.uid);
+      }
       await refreshPair();
       navigate("/setup", { replace: true });
     } catch {
@@ -288,7 +303,13 @@ export const PairSetupPage = () => {
     </div>
   );
 
-  if (step === "guide") return <QuickGuide onComplete={() => setStep("pair")} />;
+  if (step === "guide") return <QuickGuide onComplete={() => {
+    if (afterGuide === "hearing") {
+      navigate("/setup", { replace: true });
+    } else {
+      setStep("pair");
+    }
+  }} />;
 
   // ── ニックネーム設定 ──────────────────────────────
   if (step === "nickname") {
