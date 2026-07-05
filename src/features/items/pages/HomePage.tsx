@@ -576,7 +576,8 @@ export const HomePage = () => {
              onClick={closeAddModal}>
           <div onClick={(e) => e.stopPropagation()}
                style={{ width: "100%", background: "var(--color-bg)", borderRadius: "20px 20px 0 0",
-                        display: "flex", flexDirection: "column", maxHeight: "90dvh" }}>
+                        display: "flex", flexDirection: "column", maxHeight: "90dvh",
+                        overflow: "hidden" }}>
             {/* ドラッグハンドル（スワイプ判定はここだけ） */}
             <div onTouchStart={handleModalTouchStart}
                  onTouchEnd={handleModalTouchEnd}
@@ -587,9 +588,10 @@ export const HomePage = () => {
             </div>
             {/* スクロール可能なコンテンツ */}
             <div ref={modalContentRef}
-                 style={{ flex: 1, minHeight: 0, overflowY: "auto",
+                 style={{ flex: 1, overflowY: "auto",
                           display: "flex", flexDirection: "column", gap: 16,
-                          padding: "0 20px 48px" }}>
+                          padding: "0 20px 48px", overscrollBehavior: "contain",
+                          scrollbarWidth: "none" }}>
 
             {/* タイトル */}
             <div>
@@ -824,7 +826,8 @@ const ScoreBreakdownModal = ({ item, bd, onClose }: {
       <div onClick={(e) => e.stopPropagation()}
            style={{ width: "100%", background: "var(--color-bg)",
                     borderRadius: "20px 20px 0 0",
-                    maxHeight: "88dvh", display: "flex", flexDirection: "column" }}>
+                    maxHeight: "88dvh", display: "flex", flexDirection: "column",
+                    overflow: "hidden" }}>
         <div style={{ padding: "24px 20px 0", flexShrink: 0 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 4 }}>
             <span style={{ fontSize: 22, fontWeight: 700, color: "var(--color-primary)",
@@ -837,7 +840,8 @@ const ScoreBreakdownModal = ({ item, bd, onClose }: {
             {item.title}
           </p>
         </div>
-        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "0 20px 48px" }}>
+        <div style={{ flex: 1, overflowY: "auto", padding: "0 20px 48px",
+                      overscrollBehavior: "contain", scrollbarWidth: "none" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
             {rows.map(({ label, pts, na, icon }) => (
               <div key={label}
