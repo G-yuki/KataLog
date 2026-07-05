@@ -8,6 +8,7 @@ import {
   saveDisplayName,
   getUserPairId,
   createPair,
+  createSoloPair,
   joinPair,
   getPair,
   reissueInviteToken,
@@ -64,11 +65,17 @@ export const PairSetupPage = () => {
               return;
             }
 
-            // パートナー未参加 → 招待リンク画面に戻す
+            // パートナー未参加の場合
             if (members.length === 1) {
-              setPairId(existingPairId);
-              setInviteUrl(generateInviteUrl(existingPairId, data.inviteToken as string));
-              setStep("pair");
+              if (data.soloMode) {
+                // ソロユーザー → セットアップ進行状況に応じて遷移
+                navigate(data.matchingFinalized ? "/home" : data.hearing ? "/setup/swipe" : "/setup", { replace: true });
+              } else {
+                // ペア作成済みでパートナー待機中 → 招待リンク画面
+                setPairId(existingPairId);
+                setInviteUrl(generateInviteUrl(existingPairId, data.inviteToken as string));
+                setStep("pair");
+              }
               return;
             }
 
@@ -168,6 +175,21 @@ export const PairSetupPage = () => {
 
     setNicknameSaving(false);
     setStep("guide");
+  };
+
+  // ソロで始める
+  const handleSoloStart = async () => {
+    if (!user) return;
+    setPairLoading(true);
+    setPairError(null);
+    try {
+      await createSoloPair(user.uid);
+      navigate("/setup", { replace: true });
+    } catch {
+      setPairError("エラーが発生しました。もう一度お試しください。");
+    } finally {
+      setPairLoading(false);
+    }
   };
 
   // ペア作成
@@ -329,6 +351,29 @@ export const PairSetupPage = () => {
           >
             {pairLoading ? "作成中..." : "ペアを作成する"}
           </button>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 10,
+                        width: "100%", maxWidth: 280, margin: "4px 0" }}>
+            <div style={{ flex: 1, height: 1, background: "var(--color-border)" }} />
+            <span style={{ fontSize: 12, color: "var(--color-text-soft)" }}>または</span>
+            <div style={{ flex: 1, height: 1, background: "var(--color-border)" }} />
+          </div>
+
+          <button
+            style={{ width: "100%", maxWidth: 280, padding: "14px",
+                     background: "transparent", border: "1px solid var(--color-border)",
+                     borderRadius: 14, fontSize: 14, color: "var(--color-text-mid)",
+                     cursor: pairLoading ? "default" : "pointer",
+                     fontFamily: "var(--font-sans)", opacity: pairLoading ? 0.5 : 1 }}
+            onClick={handleSoloStart}
+            disabled={pairLoading}
+          >
+            1人で始める
+          </button>
+          <p style={{ fontSize: 11, color: "var(--color-text-soft)", textAlign: "center",
+                      lineHeight: 1.6, maxWidth: 260 }}>
+            あとからパートナーを招待することもできます
+          </p>
         </>
       ) : (
         <>

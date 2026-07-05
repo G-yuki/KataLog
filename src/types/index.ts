@@ -24,9 +24,10 @@ export interface Hearing {
 
 export interface Pair {
   pairId: string;
-  members: [string, string];
+  members: string[];
   inviteToken: string;
   isActive: boolean;
+  soloMode?: boolean;   // true = ソロユーザー（パートナー待ちと区別）
   createdAt: Timestamp;
   hearing?: Hearing;
 }

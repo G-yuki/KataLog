@@ -56,6 +56,23 @@ export const createPair = async (uid: string): Promise<string> => {
   return pairRef.id;
 };
 
+/** ソロペアを作成して pairId を返す（パートナー招待なしで即セットアップへ進む） */
+export const createSoloPair = async (uid: string): Promise<string> => {
+  const inviteToken = generateInviteToken();
+  const pairRef = await addDoc(collection(db, "pairs"), {
+    members: [uid],
+    inviteToken,
+    isActive: true,
+    soloMode: true,
+    createdAt: serverTimestamp(),
+  });
+  await setDoc(doc(db, "users", uid), { pairId: pairRef.id }, { merge: true });
+  return pairRef.id;
+};
+
+/** ソロペアかどうかを判定する（members.length=1 だけではペア作成待ちと区別できないため soloMode を使う） */
+export const isSoloPair = (pair: { soloMode?: boolean }): boolean => pair.soloMode === true;
+
 /** 招待トークンを照合してペアに参加する */
 export const joinPair = async (
   uid: string,
