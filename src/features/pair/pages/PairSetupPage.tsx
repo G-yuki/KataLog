@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/hooks/useAuth";
+import { usePair } from "../../../contexts/PairContext";
 import { Loading } from "../../../components/Loading";
 import {
   getDisplayName,
@@ -22,6 +23,7 @@ type Step = "loading" | "nickname" | "guide" | "pair";
 
 export const PairSetupPage = () => {
   const { user } = useAuth();
+  const { refreshPair } = usePair();
   const navigate = useNavigate();
   const [step, setStep] = useState<Step>("loading");
 
@@ -184,6 +186,7 @@ export const PairSetupPage = () => {
     setPairError(null);
     try {
       await createSoloPair(user.uid);
+      await refreshPair();
       navigate("/setup", { replace: true });
     } catch {
       setPairError("エラーが発生しました。もう一度お試しください。");
