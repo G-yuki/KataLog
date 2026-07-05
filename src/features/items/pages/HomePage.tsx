@@ -76,9 +76,17 @@ export const HomePage = () => {
   );
   const [showGuide, setShowGuide] = useState(() => !localStorage.getItem("homeGuideSeen"));
   const [guideDetailOpen, setGuideDetailOpen] = useState(false);
-  const [regionalEvents, setRegionalEvents] = useState<RegionalEvent[]>([]);
+  const [regionalEvents, setRegionalEvents] = useState<RegionalEvent[]>(() => {
+    const h = readCachedHomeState().hearing;
+    if (!h?.prefecture || h.overseas) return [];
+    const dateFrom = new Date().toISOString().split("T")[0];
+    try {
+      const c = sessionStorage.getItem(`events_${h.prefecture}_${dateFrom}`);
+      return c ? (JSON.parse(c) as RegionalEvent[]) : [];
+    } catch { return []; }
+  });
   const [eventsLoading, setEventsLoading] = useState(false);
-
+  const eventsFetchedForRef = useRef<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const restoredRef = useRef(false);
@@ -129,13 +137,22 @@ export const HomePage = () => {
     const fmt = (d: Date) => d.toISOString().split("T")[0];
     const dateFrom = fmt(today);
     const dateTo = fmt(dateToDate);
+    const fetchKey = `${hearing.prefecture}_${dateFrom}`;
 
-    const sessionKey = `events_${hearing.prefecture}_${dateFrom}`;
+    // 同じキーで既に取得済み（stale な再実行を無視）
+    if (eventsFetchedForRef.current === fetchKey) return;
+
+    const sessionKey = `events_${fetchKey}`;
     const cached = sessionStorage.getItem(sessionKey);
     if (cached) {
-      try { setRegionalEvents(JSON.parse(cached)); return; } catch { /* ignore */ }
+      try {
+        setRegionalEvents(JSON.parse(cached) as RegionalEvent[]);
+        eventsFetchedForRef.current = fetchKey;
+        return;
+      } catch { /* ignore */ }
     }
 
+    eventsFetchedForRef.current = fetchKey;
     setEventsLoading(true);
     const call = httpsCallable<
       { prefecture: string; dateFrom: string; dateTo: string },
@@ -143,8 +160,9 @@ export const HomePage = () => {
     >(functions, "fetchRegionalEvents");
     call({ prefecture: hearing.prefecture, dateFrom, dateTo })
       .then((res) => {
-        setRegionalEvents(res.data.events ?? []);
-        try { sessionStorage.setItem(sessionKey, JSON.stringify(res.data.events ?? [])); } catch { /* ignore */ }
+        const events = res.data.events ?? [];
+        setRegionalEvents(events);
+        try { sessionStorage.setItem(sessionKey, JSON.stringify(events)); } catch { /* ignore */ }
       })
       .catch((e) => console.warn("fetchRegionalEvents:", e))
       .finally(() => setEventsLoading(false));
@@ -514,16 +532,17 @@ export const HomePage = () => {
                                 ?? CATEGORY_STYLE["other"];
                   const catLabel = CATEGORY_LABEL[ev.category as keyof typeof CATEGORY_LABEL]
                                 ?? ev.category;
+                  const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(`${ev.title} ${ev.location} ${ev.date}`)}`;
                   return (
                     <div key={i}
-                         onClick={() => ev.url && window.open(ev.url, "_blank", "noopener")}
+                         onClick={() => window.open(searchUrl, "_blank", "noopener,noreferrer")}
                          style={{
                            flexShrink: 0,
                            width: 160,
                            borderRadius: 12,
                            background: catStyle.bg,
                            padding: "12px 12px 10px",
-                           cursor: ev.url ? "pointer" : "default",
+                           cursor: "pointer",
                            display: "flex",
                            flexDirection: "column",
                            gap: 4,
