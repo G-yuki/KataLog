@@ -166,9 +166,9 @@ export const HomePage = () => {
     call({ prefecture: hearing.prefecture, dateFrom, dateTo })
       .then((res) => {
         const events = res.data.events ?? [];
-        setRegionalEvents(events);
-        // 空配列はキャッシュしない（次回マウント時に再取得させる）
+        // 空を返された場合は既存のイベントを上書きしない
         if (events.length > 0) {
+          setRegionalEvents(events);
           try { sessionStorage.setItem(sessionKey, JSON.stringify(events)); } catch { /* ignore */ }
         }
       })
@@ -527,7 +527,7 @@ export const HomePage = () => {
                 {hearing?.prefecture}
               </span>
             </div>
-            {eventsLoading ? (
+            {eventsLoading && regionalEvents.length === 0 ? (
               <div style={{ padding: "12px 20px", fontSize: 12, color: "var(--color-text-soft)",
                             fontFamily: "var(--font-sans)" }}>
                 取得中...
