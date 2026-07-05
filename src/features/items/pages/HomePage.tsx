@@ -19,6 +19,9 @@ import type { ScoreBreakdown } from "../../../lib/scoring";
 import { heroUrl } from "../../../lib/item";
 import type { Item, Category, ItemType, ItemStatus, Hearing, RegionalEvent } from "../../../types";
 
+// 地域イベントのモジュールレベルキャッシュ（リマウントをまたいで保持）
+let _eventsModuleCache: { key: string; data: RegionalEvent[] } | null = null;
+
 // sessionStorage から home_state を同期読み込み（pairId 不要の先頭一致サーチ）
 function readCachedHomeState(): {
   sortOrder?: "score" | "createdAt";
@@ -79,14 +82,21 @@ export const HomePage = () => {
   const [regionalEvents, setRegionalEvents] = useState<RegionalEvent[]>(() => {
     const h = readCachedHomeState().hearing;
     if (!h?.prefecture || h.overseas) return [];
-    const dateFrom = new Date().toISOString().split("T")[0];
+    const key = `${h.prefecture}_${new Date().toISOString().split("T")[0]}`;
+    // 1. モジュールキャッシュ（リマウントをまたいで即時復元）
+    if (_eventsModuleCache?.key === key) return _eventsModuleCache.data;
+    // 2. sessionStorage フォールバック
     try {
-      const c = sessionStorage.getItem(`events_${h.prefecture}_${dateFrom}`);
-      return c ? (JSON.parse(c) as RegionalEvent[]) : [];
-    } catch { return []; }
+      const c = sessionStorage.getItem(`events_${key}`);
+      if (c) {
+        const parsed = JSON.parse(c) as RegionalEvent[];
+        if (parsed.length > 0) { _eventsModuleCache = { key, data: parsed }; return parsed; }
+      }
+    } catch { /* ignore */ }
+    return [];
   });
   const [eventsLoading, setEventsLoading] = useState(false);
-  const eventsFetchedForRef = useRef<string | null>(null);
+  const eventsFetchedKeyRef = useRef<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const restoredRef = useRef(false);
@@ -131,33 +141,37 @@ export const HomePage = () => {
   // 地域イベント取得（hearing に prefecture が設定されていて国内の場合のみ）
   useEffect(() => {
     if (!hearing || hearing.overseas || !hearing.prefecture) return;
-    const today = new Date();
-    const dateToDate = new Date();
-    dateToDate.setDate(today.getDate() + 7);
-    const fmt = (d: Date) => d.toISOString().split("T")[0];
-    const dateFrom = fmt(today);
-    const dateTo = fmt(dateToDate);
+    const dateFrom = new Date().toISOString().split("T")[0];
+    const dateToDate = new Date(); dateToDate.setDate(dateToDate.getDate() + 7);
+    const dateTo = dateToDate.toISOString().split("T")[0];
     const fetchKey = `${hearing.prefecture}_${dateFrom}`;
 
-    // 同じキーで既に取得済み（stale な再実行を無視）
-    if (eventsFetchedForRef.current === fetchKey) return;
+    // モジュールキャッシュに既にある → 表示を確保して終了
+    if (_eventsModuleCache?.key === fetchKey) {
+      if (_eventsModuleCache.data.length > 0) setRegionalEvents(_eventsModuleCache.data);
+      return;
+    }
 
+    // 同一キーで CF 呼び出し済み（二重実行防止）
+    if (eventsFetchedKeyRef.current === fetchKey) return;
+
+    // sessionStorage キャッシュ確認
     const sessionKey = `events_${fetchKey}`;
     const cached = sessionStorage.getItem(sessionKey);
     if (cached) {
       try {
         const parsed = JSON.parse(cached) as RegionalEvent[];
         if (parsed.length > 0) {
+          _eventsModuleCache = { key: fetchKey, data: parsed };
           setRegionalEvents(parsed);
-          eventsFetchedForRef.current = fetchKey;
+          eventsFetchedKeyRef.current = fetchKey;
           return;
         }
-        // 空配列キャッシュは無効として削除し CF を再実行
         sessionStorage.removeItem(sessionKey);
       } catch { /* ignore */ }
     }
 
-    eventsFetchedForRef.current = fetchKey;
+    eventsFetchedKeyRef.current = fetchKey;
     setEventsLoading(true);
     const call = httpsCallable<
       { prefecture: string; dateFrom: string; dateTo: string },
@@ -166,8 +180,8 @@ export const HomePage = () => {
     call({ prefecture: hearing.prefecture, dateFrom, dateTo })
       .then((res) => {
         const events = res.data.events ?? [];
-        // 空を返された場合は既存のイベントを上書きしない
         if (events.length > 0) {
+          _eventsModuleCache = { key: fetchKey, data: events };
           setRegionalEvents(events);
           try { sessionStorage.setItem(sessionKey, JSON.stringify(events)); } catch { /* ignore */ }
         }
