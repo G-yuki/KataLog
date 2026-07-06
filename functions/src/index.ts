@@ -610,16 +610,15 @@ export const fetchRegionalEvents = onCall(
 
 // ── placeRating 一括補完（2026-07-01以前にenrich済みのアイテム対象・一回限り） ──
 export const backfillPlaceRating = onCall(
-  { invoker: "public", secrets: [mapsServerKey], enforceAppCheck: false, timeoutSeconds: 540, region: "asia-northeast1" },
+  { invoker: "public", secrets: [mapsServerKey], enforceAppCheck: false, timeoutSeconds: 540 },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "ログインが必要です。");
     }
 
-    // placeRating == null（未設定・null両方）のアイテムを全ペアから取得
+    // 全アイテムを取得してコード側でフィルター（collectionGroup where はインデックス不要にするため）
     const snapshot = await admin.firestore()
       .collectionGroup("items")
-      .where("placeRating", "==", null)
       .get();
 
     let processed = 0;
@@ -629,9 +628,10 @@ export const backfillPlaceRating = onCall(
     for (const doc of snapshot.docs) {
       const data = doc.data();
       const placeId = data.placeId as string | null | undefined;
+      const placeRating = data.placeRating;
 
-      // placeId 未設定 or 空（未enrich or スポット未特定）はスキップ
-      if (!placeId || placeId === "") { skipped++; continue; }
+      // placeId 未設定 or 空、または placeRating が既に設定済みはスキップ
+      if (!placeId || placeId === "" || placeRating !== undefined && placeRating !== null) { skipped++; continue; }
 
       processed++;
       try {

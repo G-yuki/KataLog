@@ -262,6 +262,7 @@ export const SettingsPage = () => {
           </Row>
         </Section>
 
+        {/* [一時] placeRating バッチ補完 — 実行後に削除 */}
         {/* アクション */}
         <div style={{ marginTop: 32, display: "flex", flexDirection: "column", gap: 12 }}>
           <ActionButton onClick={handleSignOut} color="var(--color-text-mid)">
