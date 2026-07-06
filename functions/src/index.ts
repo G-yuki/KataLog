@@ -608,6 +608,50 @@ export const fetchRegionalEvents = onCall(
   }
 );
 
+// ── placeRating 一括補完（2026-07-01以前にenrich済みのアイテム対象・一回限り） ──
+export const backfillPlaceRating = onCall(
+  { invoker: "public", secrets: [mapsServerKey], enforceAppCheck: false, timeoutSeconds: 540, region: "asia-northeast1" },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "ログインが必要です。");
+    }
+
+    // placeRating == null（未設定・null両方）のアイテムを全ペアから取得
+    const snapshot = await admin.firestore()
+      .collectionGroup("items")
+      .where("placeRating", "==", null)
+      .get();
+
+    let processed = 0;
+    let updated = 0;
+    let skipped = 0;
+
+    for (const doc of snapshot.docs) {
+      const data = doc.data();
+      const placeId = data.placeId as string | null | undefined;
+
+      // placeId 未設定 or 空（未enrich or スポット未特定）はスキップ
+      if (!placeId || placeId === "") { skipped++; continue; }
+
+      processed++;
+      try {
+        const res = await fetch(
+          `https://places.googleapis.com/v1/places/${placeId}`,
+          { headers: { "X-Goog-Api-Key": mapsServerKey.value(), "X-Goog-FieldMask": "rating" } }
+        );
+        if (!res.ok) { console.warn(`backfillPlaceRating: HTTP ${res.status} for ${placeId}`); continue; }
+        const detail = await res.json() as { rating?: number };
+        await doc.ref.update({ placeRating: detail.rating ?? null });
+        updated++;
+      } catch (e) {
+        console.warn(`backfillPlaceRating: failed for ${placeId}`, e);
+      }
+    }
+
+    return { processed, updated, skipped };
+  }
+);
+
 // ── アイテム削除トリガー（TTL 削除時に Storage 写真を削除） ────────────
 export const onItemDeleted = onDocumentDeleted(
   {
